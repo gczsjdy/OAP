@@ -16,6 +16,8 @@ You should have [Apache Spark](http://spark.apache.org/) of version 2.1.0 instal
 spark.files                      file:///path/to/oap-dir/oap-<version>.jar
 spark.executor.extraClassPath      ./oap-<version>.jar
 spark.driver.extraClassPath        /path/to/oap-dir/oap-0.2.0.jar
+spark.memory.offHeap.enabled       true
+spark.memory.offHeap.size          some reasonable number
 ```
 4. Run spark by `bin/spark-sql`, `bin/spark-shell`, `sbin/start-thriftserver` or `bin/pyspark` and try our examples
 
