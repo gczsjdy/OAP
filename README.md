@@ -32,9 +32,9 @@ spark.memory.offHeap.size          some reasonable number
 > val data = (1 to 300).map { i => (i, s"this is test $i") }.toDF().createOrReplaceTempView("t")
 > spark.sql("insert overwrite table oap_test select * from t")
 > spark.sql("create oindex index1 on oap_test (a)")
-> spark.sql("show oindex from oap_test")
+> spark.sql("show oindex from oap_test").show()
 > spark.sql("SELECT * FROM oap_test WHERE a = 1").show()
-> spark.sql("drop oindex index on oap_test")
+> spark.sql("drop oindex index1 on oap_test")
 ```
 For a more detailed examples with performance compare, you can refer to [this page](https://github.com/Intel-bigdata/OAP/wiki/OAP-examples) for further instructions.
 ## Running Test
