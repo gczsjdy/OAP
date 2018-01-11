@@ -15,7 +15,7 @@ You should have [Apache Spark](http://spark.apache.org/) of version 2.1.0 instal
 ```
 spark.files                      file:///path/to/oap-dir/oap-<version>.jar
 spark.executor.extraClassPath      ./oap-<version>.jar
-spark.driver.extraClassPath        /path/to/oap-dir/oap-0.2.0.jar
+spark.driver.extraClassPath        /path/to/oap-dir/oap-<version>.jar
 spark.memory.offHeap.enabled       true
 spark.memory.offHeap.size          some reasonable number
 ```
