@@ -17,7 +17,7 @@ spark.files                      file:///path/to/oap-dir/oap-<version>.jar
 spark.executor.extraClassPath      ./oap-<version>.jar
 spark.driver.extraClassPath        /path/to/oap-dir/oap-<version>.jar
 spark.memory.offHeap.enabled       true
-spark.memory.offHeap.size          some reasonable number
+spark.memory.offHeap.size          2g
 ```
 4. Run spark by `bin/spark-sql`, `bin/spark-shell`, `sbin/start-thriftserver` or `bin/pyspark` and try our examples
 
