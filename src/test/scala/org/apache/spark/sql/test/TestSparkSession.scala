@@ -28,10 +28,10 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
 
   def this(sparkConf: SparkConf) {
     this(
-      if (sparkConf.getBoolean("spark.test.localCluster.enabled", false)) {
-        val numExecutor = sparkConf.getInt("spark.test.localCluster.numExecutor", 3)
-        val cores = sparkConf.getInt("spark.test.localCluster.cores", 5)
-        val memory = sparkConf.getInt("spark.test.localCluster.memory", 1024)
+      if (sys.props.get("spark.test.localCluster.enabled") == Some("true")) {
+        val numExecutor = 3
+        val cores = 5
+        val memory = 1024
         new SparkContext(s"local-cluster[$numExecutor, $cores, $memory]",
           "test-cluster-sql-context",
           sparkConf.set("spark.sql.testkey", "true"))
