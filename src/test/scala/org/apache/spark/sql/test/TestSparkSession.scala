@@ -27,8 +27,19 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
 private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
 
   def this(sparkConf: SparkConf) {
-    this(new SparkContext("local-cluster[3, 5, 1024]", "test-cluster-sql-context",
-      sparkConf.set("spark.sql.testkey", "true")))
+    this(
+      if (sparkConf.getBoolean("spark.test.localCluster.enabled", false)) {
+        val numExecutor = sparkConf.getInt("spark.test.localCluster.numExecutor", 3)
+        val cores = sparkConf.getInt("spark.test.localCluster.cores", 5)
+        val memory = sparkConf.getInt("spark.test.localCluster.memory", 1024)
+        new SparkContext(s"local-cluster[$numExecutor, $cores, $memory]",
+          "test-cluster-sql-context",
+          sparkConf.set("spark.sql.testkey", "true"))
+      } else {
+        new SparkContext("local[2]",
+          "test-sql-context",
+          sparkConf.set("spark.sql.testkey", "true"))
+      })
   }
 
   def this() {
