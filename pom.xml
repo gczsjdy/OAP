@@ -453,6 +453,7 @@
             <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
             <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
+            <spark.test.home>/home/gcz/spark/spark-adaptive</spark.test.home>
           </systemProperties>
         </configuration>
         <executions>

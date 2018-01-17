@@ -25,8 +25,9 @@ import org.apache.spark.sql.internal.{SessionState, SQLConf}
  * A special [[SparkSession]] prepared for testing.
  */
 private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
+
   def this(sparkConf: SparkConf) {
-    this(new SparkContext("yarn", "test-cluster-sql-context",
+    this(new SparkContext("local-cluster[3, 5, 1024]", "test-cluster-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
   }
 
