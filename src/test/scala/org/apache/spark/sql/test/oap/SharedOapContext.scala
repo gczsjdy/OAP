@@ -21,15 +21,21 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.DebugFilesystem
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.oap.{IndexType, OapFileFormat}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.{SharedSQLContext, TestOapSession, TestSparkSession}
 
 trait SharedOapContext extends SharedSQLContext {
 
   // avoid the overflow of offHeap memory
   sparkConf.set("spark.memory.offHeap.size", "100m")
+
+  protected override def createSparkSession: TestSparkSession = {
+    new TestOapSession(sparkConf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
+  }
+
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     spark.sqlContext.setConf(SQLConf.OAP_BTREE_ROW_LIST_PART_SIZE, 64)
