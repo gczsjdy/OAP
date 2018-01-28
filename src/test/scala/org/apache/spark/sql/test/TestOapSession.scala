@@ -19,6 +19,7 @@ package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.DebugFilesystem
 
 /**
  * A special [[SparkSession]] prepared for OAP testing.
@@ -32,12 +33,14 @@ private[sql] class TestOapSession(sc: SparkContext) extends TestSparkSession(sc)
         val cores = 5
         val memory = 1024
         new SparkContext(s"local-cluster[$numExecutor, $cores, $memory]",
-          "test-cluster-sql-context",
-          sparkConf.set("spark.sql.testkey", "true"))
+          "test-cluster-oap-context",
+          sparkConf.set("spark.sql.testkey", "true")
+            .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
       } else {
         new SparkContext("local[2]",
-          "test-sql-context",
-          sparkConf.set("spark.sql.testkey", "true"))
+          "test-oap-context",
+          sparkConf.set("spark.sql.testkey", "true")
+            .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
       })
   }
 }

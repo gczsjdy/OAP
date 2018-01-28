@@ -21,7 +21,6 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.DebugFilesystem
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.oap.{IndexType, OapFileFormat}
 import org.apache.spark.sql.internal.SQLConf
@@ -33,7 +32,7 @@ trait SharedOapContext extends SharedSQLContext {
   sparkConf.set("spark.memory.offHeap.size", "100m")
 
   protected override def createSparkSession: TestSparkSession = {
-    new TestOapSession(sparkConf.set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
+    new TestOapSession(sparkConf)
   }
 
   protected override def beforeAll(): Unit = {
