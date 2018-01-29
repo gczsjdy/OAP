@@ -454,7 +454,6 @@
             <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             <spark.unsafe.exceptionOnMemoryLeak>true</spark.unsafe.exceptionOnMemoryLeak>
             <spark.test.home>${env.SPARK_HOME}</spark.test.home>
-            <spark.test.localCluster.enabled>${local.cluster}</spark.test.localCluster.enabled>
           </systemProperties>
         </configuration>
         <executions>

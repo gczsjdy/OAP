@@ -27,20 +27,25 @@ import org.apache.spark.DebugFilesystem
 private[sql] class TestOapSession(sc: SparkContext) extends TestSparkSession(sc) { self =>
 
   def this(sparkConf: SparkConf) {
-    this(
-      if (sys.props.get("spark.test.localCluster.enabled") == Some("true")) {
-        val numExecutor = 3
-        val cores = 5
-        val memory = 1024
-        new SparkContext(s"local-cluster[$numExecutor, $cores, $memory]",
-          "test-cluster-oap-context",
-          sparkConf.set("spark.sql.testkey", "true")
-            .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
-      } else {
-        new SparkContext("local[2]",
-          "test-oap-context",
-          sparkConf.set("spark.sql.testkey", "true")
-            .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName))
-      })
+    this(new SparkContext(
+      "local[2]",
+      "test-oap-context",
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)))
+  }
+}
+
+/**
+ * A special [[SparkSession]] prepared for OAP testing in LocalClusterMode. This session is used by
+ * extending [[org.apache.spark.sql.test.oap.SharedOapLocalClusterContext]]
+ */
+private[sql] class TestOapLocalClusterSession(sc: SparkContext) extends TestSparkSession(sc) {
+  self =>
+  def this(sparkConf: SparkConf) {
+    this(new SparkContext(
+      s"local-cluster[3, 5, 1024]",
+      "test-oap-local-cluster-context",
+      sparkConf.set("spark.sql.testkey", "true")
+        .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)))
   }
 }
