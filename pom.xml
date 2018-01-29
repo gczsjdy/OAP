@@ -520,25 +520,4 @@
     
   </build>
 
-  <profiles>
-    <profile>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <id>local</id>
-      <properties>
-        <local.cluster>false</local.cluster>
-      </properties>
-    </profile>
-    <profile>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <id>cluster</id>
-      <properties>
-        <local.cluster>true</local.cluster>
-      </properties>
-    </profile>
-  </profiles>
-
 </project>
