@@ -63,7 +63,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
     val indexDisableList = conf match {
       case None => Seq("")
       case Some(configuration) => configuration.get(
-        OapConf.OAP_INDEX_DISABLE_SPECIES.key, OapConf.OAP_INDEX_DISABLE_SPECIES.defaultValue.get)
+        OapConf.OAP_INDEX_DISABLE_LIST.key, OapConf.OAP_INDEX_DISABLE_LIST.defaultValue.get)
           .toLowerCase().split(",").toSeq
     }
     while (idx < meta.indexMetas.length && !indexDisableList.contains(meta.indexMetas(idx).name)) {
