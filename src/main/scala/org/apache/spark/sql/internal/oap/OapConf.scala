@@ -169,9 +169,9 @@ object OapConf {
       .createWithDefault(1024 * 1024)
 
   val OAP_INDEX_DISABLE_SPECIES =
-    SQLConfigBuilder("spark.sql.oap.oindex.disable.species")
+    SQLConfigBuilder("spark.sql.oap.oindex.disable.list")
     .internal()
-    .doc("To disable one specific index for test purpose")
+    .doc("To disable specific index by index names for test purpose")
     .stringConf
     .createWithDefault("")
 

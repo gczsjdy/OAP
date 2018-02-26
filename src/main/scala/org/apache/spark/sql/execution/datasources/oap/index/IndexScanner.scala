@@ -297,7 +297,7 @@ private[oap] object ScannerBuilder extends Logging {
       ic: IndexContext,
       scannerOptions: Map[String, String] = Map.empty,
       maxChooseSize: Int = 1,
-      conf: Configuration = null): Array[Filter] = {
+      conf: Option[Configuration] = None): Array[Filter] = {
     if (filters == null || filters.isEmpty) return filters
     logDebug("Transform filters into Intervals:")
     val intervalMapArray = filters.map(optimizeFilterBound(_, ic))

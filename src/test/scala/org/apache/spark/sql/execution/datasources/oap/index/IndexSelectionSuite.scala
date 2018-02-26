@@ -21,9 +21,11 @@ import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
 import org.apache.spark.sql.sources._
@@ -248,5 +250,22 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
       availIdxs.append((indexer._1, indexer._2.name))
     }
     assert(availIdxs sameElements expectIdxs)
+  }
+
+  test("Allow to disable specific indices") {
+    sql("create oindex idxa on oap_test(a)")
+    sql("create oindex idxb on oap_test(b)")
+
+    val oapMeta = DataSourceMeta.initialize(path, configuration)
+    val ic = new IndexContext(oapMeta)
+    val filters: Array[Filter] = Array(EqualTo("a", 8), EqualTo("b", 9))
+    ScannerBuilder.build(filters, ic, Map.empty, 2)
+    assert(ic.getScanners.get.scanners.length == 2)
+    ic.clear()
+
+    val conf = new Configuration()
+    conf.set(OapConf.OAP_INDEX_DISABLE_SPECIES.key, "idxa,idxb")
+    ScannerBuilder.build(filters, ic, Map.empty, 1, Some(conf))
+    assert(ic.getScanners.isEmpty)
   }
 }
