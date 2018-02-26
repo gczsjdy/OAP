@@ -167,4 +167,12 @@ object OapConf {
       .doc("The row count of each part of row list in btree index")
       .intConf
       .createWithDefault(1024 * 1024)
+
+  val OAP_INDEX_DISABLE_SPECIES =
+    SQLConfigBuilder("spark.sql.oap.oindex.disable.species")
+    .internal()
+    .doc("To disable one specific index for test purpose")
+    .stringConf
+    .createWithDefault("")
+
 }

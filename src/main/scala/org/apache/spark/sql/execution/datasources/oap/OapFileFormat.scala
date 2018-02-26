@@ -258,7 +258,7 @@ private[sql] class OapFileFormat extends FileFormat
             // get index options such as limit, order, etc.
             val indexOptions = options.filterKeys(OapFileFormat.oapOptimizationKeySeq.contains(_))
             val maxChooseSize = sparkSession.conf.get(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE)
-            ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize)
+            ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize, hadoopConf)
           }
         }
 

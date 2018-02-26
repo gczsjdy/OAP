@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.oap.index
 
+import org.apache.hadoop.conf.Configuration
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,6 +27,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.oap._
+import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -51,18 +54,23 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
     scanners = null
   }
 
-  private def selectAvailableIndex(intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]])
+  private def selectAvailableIndex(
+      intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]],
+      conf: Configuration)
   : Unit = {
     logDebug("Selecting Available Index:")
     var idx = 0
+    val indexDisableSpecies = conf.get(
+      OapConf.OAP_INDEX_DISABLE_SPECIES.key, OapConf.OAP_INDEX_DISABLE_SPECIES.defaultValue.get)
+      .toLowerCase
     while (idx < meta.indexMetas.length) {
       meta.indexMetas(idx).indexType match {
-        case BTreeIndex(entries) if entries.length == 1 =>
+        case BTreeIndex(entries) if !indexDisableSpecies.contains("btree") && entries.length == 1 =>
           val attribute = meta.schema(entries(0).ordinal).name
           if (intervalMap.contains(attribute)) {
             availableIndexes.append((0, meta.indexMetas(idx)) )
           }
-        case BTreeIndex(entries) =>
+        case BTreeIndex(entries) if !indexDisableSpecies.contains("btree") =>
           var num = 0 // the number of matched column
           var flag = 0
           // flag (terminated indication):
@@ -85,7 +93,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
           if (num>0) {
             availableIndexes.append( (num-1, meta.indexMetas(idx)) )
           }
-        case BitMapIndex(entries) =>
+        case BitMapIndex(entries) if !indexDisableSpecies.contains("bitmap") =>
           for (entry <- entries) {
             if (intervalMap.contains(meta.schema(entry).name)) {
               availableIndexes.append((entries.indexOf(entry), meta.indexMetas(idx)) )
@@ -183,8 +191,9 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
   def buildScanners(
       intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]],
       options: Map[String, String] = Map.empty,
-      maxChooseSize: Int = 1): Unit = {
-    selectAvailableIndex(intervalMap)
+      maxChooseSize: Int = 1,
+      conf: Configuration): Unit = {
+    selectAvailableIndex(intervalMap, conf)
     val availableIndexers = getAvailableIndexers(intervalMap.size, maxChooseSize)
 
     //    intervalArray.sortWith(compare)
