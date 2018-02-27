@@ -56,8 +56,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
 
   private def selectAvailableIndex(
       intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]],
-      conf: Option[Configuration])
-  : Unit = {
+      conf: Option[Configuration]): Unit = {
     logDebug("Selecting Available Index:")
     var idx = 0
     val indexDisableList = conf match {
