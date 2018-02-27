@@ -64,7 +64,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
       case None => Seq("")
       case Some(configuration) => configuration.get(
         OapConf.OAP_INDEX_DISABLE_LIST.key, OapConf.OAP_INDEX_DISABLE_LIST.defaultValue.get)
-          .toLowerCase().split(",").toSeq
+          .split(",").map(_.trim).toSeq
     }
     while (idx < meta.indexMetas.length && !indexDisableList.contains(meta.indexMetas(idx).name)) {
       meta.indexMetas(idx).indexType match {
