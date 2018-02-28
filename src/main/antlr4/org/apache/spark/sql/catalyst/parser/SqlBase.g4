@@ -154,6 +154,8 @@ statement
         partitionSpec?                                                 #oapCreateIndex
     | DROP SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
         partitionSpec?                                                 #oapDropIndex
+    | DISABLE SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
+        partitionSpec?                                                 #oapDisableIndex
     | SHOW SINDEX (FROM | IN) tableIdentifier                          #oapShowIndex
     | CHECK SINDEX ON tableIdentifier partitionSpec?                   #oapCheckIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand

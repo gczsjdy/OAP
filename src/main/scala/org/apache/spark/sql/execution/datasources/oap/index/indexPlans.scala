@@ -21,8 +21,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.sql._
@@ -641,5 +641,56 @@ case class OapCheckIndexCommand(
         partitionWithMeta.flatMap(checkEachPartition(sparkSession, fs, dataSchema, _))
     }
 
+  }
+}
+
+/**
+ * Disable specific indices
+ */
+case class OapDisableIndexCommand(
+    indexNames: String,
+    table: TableIdentifier,
+    allowNotExists: Boolean,
+    partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val qe = sparkSession.sessionState.executePlan(UnresolvedRelation(table))
+    qe.assertAnalyzed()
+    val relation = qe.optimizedPlan
+
+    relation match {
+      case LogicalRelation(HadoopFsRelation(fileCatalog, _, _, _, format, _), _, identifier)
+        if format.isInstanceOf[OapFileFormat] || format.isInstanceOf[ParquetFileFormat] =>
+        logInfo(s"Disabling index $indexNames")
+        val partitions = OapUtils.getPartitions(fileCatalog, partitionSpec)
+        partitions.filter(_.files.nonEmpty).foreach(p => {
+          val parent = p.files.head.getPath.getParent
+          // TODO get `fs` outside of foreach() to boost
+          val fs = parent.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
+          if (fs.exists(new Path(parent, OapFileFormat.OAP_META_FILE))) {
+            val metaBuilder = new DataSourceMetaBuilder()
+            val m = OapUtils.getMeta(sparkSession.sparkContext.hadoopConfiguration, parent)
+            assert(m.nonEmpty)
+            val oldMeta = m.get
+            val existsIndexNameList = oldMeta.indexMetas.map(_.name)
+            val existsData = oldMeta.fileMetas
+            val indexNameList = indexNames.split(",").map(_.trim)
+            val notExistsIndexNameList = indexNameList.filterNot(existsIndexNameList.contains(_))
+            val notExistsIndicesString = notExistsIndexNameList.mkString(", ")
+            if (!notExistsIndexNameList.isEmpty) {
+              if (!allowNotExists) {
+                throw new AnalysisException(
+                  s"""Index $notExistsIndicesString does not exist on
+                     | ${identifier.getOrElse(parent)}""".stripMargin)
+              } else {
+                logWarning(s"drop non-exists index $notExistsIndicesString")
+              }
+            }
+            sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, indexNames)
+          }
+        })
+      case other => sys.error(s"We don't support index dropping for ${other.simpleString}")
+    }
+    Seq.empty
   }
 }
