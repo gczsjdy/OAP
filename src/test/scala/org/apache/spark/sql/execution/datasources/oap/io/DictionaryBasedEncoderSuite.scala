@@ -51,9 +51,14 @@ class DictionaryBasedEncoderCheck extends Properties("DictionaryBasedEncoder") {
           val fiberBuilder = PlainBinaryDictionaryFiberBuilder(rowCount, 0, StringType)
           !(0 until groupCount).exists { group =>
             // If lastCount > rowCount, assume lastCount = rowCount
-            val count = if (group < groupCount - 1) rowCount
-            else if (lastCount > rowCount) rowCount
-            else lastCount
+            val count =
+              if (group < groupCount - 1) {
+                rowCount
+              } else if (lastCount > rowCount) {
+                rowCount
+              } else {
+                lastCount
+              }
             (0 until count).foreach { row =>
               fiberBuilder.append(InternalRow(UTF8String.fromString(values(row % values.length))))
               referenceFiberBuilder
@@ -64,7 +69,7 @@ class DictionaryBasedEncoderCheck extends Properties("DictionaryBasedEncoder") {
               new DictionaryPage(
                 BytesInput.from(fiberBuilder.buildDictionary),
                 fiberBuilder.getDictionarySize,
-                org.apache.parquet.column.Encoding.PLAIN_DICTIONARY))
+                org.apache.parquet.column.Encoding.PLAIN))
             val fiberParser = PlainDictionaryFiberParser(
               new OapDataFileHandle(rowCountInEachGroup = rowCount), dictionary, StringType)
             val parsedBytes = fiberParser.parse(bytes, count)
@@ -76,7 +81,9 @@ class DictionaryBasedEncoderCheck extends Properties("DictionaryBasedEncoder") {
             assert(parsedBytes.length == referenceBytes.length)
             parsedBytes.zip(referenceBytes).exists(byte => byte._1 != byte._2)
           }
-        } else true
+        } else {
+          true
+        }
     }
   }
 }

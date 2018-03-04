@@ -28,6 +28,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.parquet.hadoop.util.SerializationUtil
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -37,19 +38,19 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.oap.filecache.DataFileHandleCacheManager
 import org.apache.spark.sql.execution.datasources.oap.index.{IndexContext, ScannerBuilder}
 import org.apache.spark.sql.execution.datasources.oap.io._
-import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.datasources.oap.utils.{FilterHelper, OapUtils}
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StructField, StructType}
-import org.apache.spark.util.{LongAccumulator, SerializableConfiguration}
+import org.apache.spark.util.SerializableConfiguration
 
 private[sql] class OapFileFormat extends FileFormat
   with DataSourceRegister
   with Logging
   with Serializable {
 
-  var selectedRows: LongAccumulator = _
-  var skippedRows: LongAccumulator = _
+  val oapMetrics = new OapMetrics
 
   override def initialize(
       sparkSession: SparkSession,
@@ -76,9 +77,6 @@ private[sql] class OapFileFormat extends FileFormat
     // OapFileFormat.serializeDataSourceMeta(hadoopConf, meta)
     inferSchema = meta.map(_.schema)
 
-    selectedRows = sparkSession.sparkContext.longAccumulator("Selected Row Count")
-    skippedRows = sparkSession.sparkContext.longAccumulator("Skipped Row Count")
-
     this
   }
 
@@ -87,6 +85,9 @@ private[sql] class OapFileFormat extends FileFormat
   var meta: Option[DataSourceMeta] = _
   // map of columns->IndexType
   private var hitIndexColumns: Map[String, IndexType] = _
+
+  def initMetrics(metrics: Map[String, SQLMetric]): Unit =
+    oapMetrics.initMetrics(metrics)
 
   def getHitIndexColumns: Map[String, IndexType] = {
     if (this.hitIndexColumns == null) {
@@ -106,14 +107,14 @@ private[sql] class OapFileFormat extends FileFormat
     // TODO: Should we have our own config util instead of SqlConf?
     // First use table option, if not, use SqlConf, else, use default value.
     conf.set(OapFileFormat.COMPRESSION, options.getOrElse("compression",
-        sparkSession.conf.get(SQLConf.OAP_COMPRESSION.key,
+        sparkSession.conf.get(OapConf.OAP_COMPRESSION.key,
           OapFileFormat.DEFAULT_COMPRESSION)))
 
     conf.set(OapFileFormat.ROW_GROUP_SIZE, options.getOrElse("rowgroup",
-      sparkSession.conf.get(SQLConf.OAP_ROW_GROUP_SIZE.key,
+      sparkSession.conf.get(OapConf.OAP_ROW_GROUP_SIZE.key,
       OapFileFormat.DEFAULT_ROW_GROUP_SIZE)))
 
-    new OapOutputWriterFactory(sparkSession.sqlContext.conf,
+    new OapOutputWriterFactory(
       dataSchema,
       job,
       options)
@@ -256,7 +257,7 @@ private[sql] class OapFileFormat extends FileFormat
             supportFilters.foreach(filter => logDebug("\t" + filter.toString))
             // get index options such as limit, order, etc.
             val indexOptions = options.filterKeys(OapFileFormat.oapOptimizationKeySeq.contains(_))
-            val maxChooseSize = sparkSession.conf.get(SQLConf.OAP_INDEXER_CHOICE_MAX_SIZE)
+            val maxChooseSize = sparkSession.conf.get(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE)
             ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize)
           }
         }
@@ -271,11 +272,8 @@ private[sql] class OapFileFormat extends FileFormat
         }
 
         val requiredIds = requiredSchema.map(dataSchema.fields.indexOf(_)).toArray
+        val pushed = FilterHelper.tryToPushFilters(sparkSession, requiredSchema, filters)
 
-        hadoopConf.setDouble(SQLConf.OAP_FULL_SCAN_THRESHOLD.key,
-          sparkSession.conf.get(SQLConf.OAP_FULL_SCAN_THRESHOLD))
-        hadoopConf.setBoolean(SQLConf.OAP_ENABLE_OINDEX.key,
-          sparkSession.conf.get(SQLConf.OAP_ENABLE_OINDEX))
         val broadcastedHadoopConf =
           sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -290,31 +288,30 @@ private[sql] class OapFileFormat extends FileFormat
             case oap: OapDataFileHandle =>
               oap.totalRowCount()
             case parquet: ParquetDataFileHandle =>
-              parquet.footer.getBlocks.asScala.foldLeft(0L) {
-                (sum, block) => sum + block.getRowCount
-              }
+              parquet.footer.getBlocks.asScala.foldLeft(0L)((s, b) => s + b.getRowCount)
             case _ => 0L
           }
+          oapMetrics.updateTotalRows(totalRows)
 
-          if (dataFileHandle.isInstanceOf[OapDataFileHandle] && filters.exists(filter =>
-            canSkipFile(dataFileHandle.asInstanceOf[OapDataFileHandle].columnsMeta.map(
-              _.statistics), filter, m.schema))) {
-            selectedRows.add(0)
-            skippedRows.add(totalRows)
-            Iterator.empty
-          } else {
-            OapIndexInfo.partitionOapIndex.put(file.filePath, false)
-            val reader = new OapDataReader(
-              new Path(new URI(file.filePath)), m, filterScanners, requiredIds)
-            val iter = reader.initialize(conf, options)
-            selectedRows.add(reader.selectedRows.getOrElse(totalRows))
-            skippedRows.add(totalRows - reader.selectedRows.getOrElse(totalRows))
+          dataFileHandle match {
+            case handle: OapDataFileHandle if filters.exists(filter => canSkipFile(
+                handle.columnsMeta.map(_.statistics), filter, m.schema)) =>
+              oapMetrics.skipForStatistic(totalRows)
+              Iterator.empty
+            case _ =>
+              OapIndexInfo.partitionOapIndex.put(file.filePath, false)
+              FilterHelper.setFilterIfExist(conf, pushed)
+              val reader = new OapDataReader(
+                new Path(new URI(file.filePath)), m, filterScanners, requiredIds)
+              val iter = reader.initialize(conf, options)
+              Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+              oapMetrics.updateIndexAndRowRead(reader, totalRows)
 
-            val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-            val joinedRow = new JoinedRow()
-            val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+              val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+              val joinedRow = new JoinedRow()
+              val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-            iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+              iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
           }
         }
       case None => (_: PartitionedFile) => {
@@ -334,7 +331,7 @@ private[sql] class OapFileFormat extends FileFormat
   def hasAvailableIndex(
       expressions: Seq[Expression],
       requiredTypes: Seq[IndexType] = Nil): Boolean = {
-    if (expressions.nonEmpty && sparkSession.conf.get(SQLConf.OAP_ENABLE_OINDEX)) {
+    if (expressions.nonEmpty && sparkSession.conf.get(OapConf.OAP_ENABLE_OINDEX)) {
       meta match {
         case Some(m) if requiredTypes.isEmpty =>
           expressions.exists(m.isSupportedByIndex(_, None))
@@ -346,19 +343,24 @@ private[sql] class OapFileFormat extends FileFormat
           }
         case _ => false
       }
-    } else false
+    } else {
+      false
+    }
   }
+}
+
+private[oap] object INDEX_STAT extends Enumeration {
+  type INDEX_STAT = Value
+  val MISS_INDEX, HIT_INDEX, IGNORE_INDEX = Value
 }
 
 /**
  * Oap Output Writer Factory
- * @param sqlConf
  * @param dataSchema
  * @param job
  * @param options
  */
 private[oap] class OapOutputWriterFactory(
-    sqlConf: SQLConf,
     dataSchema: StructType,
     @transient protected val job: Job,
     options: Map[String, String]) extends OutputWriterFactory {
@@ -397,7 +399,9 @@ private[oap] class OapOutputWriterFactory(
       val oldMeta = m.get
       val existsIndexes = oldMeta.indexMetas
       val existsData = oldMeta.fileMetas
-      if (existsData != null) existsData.foreach(builder.addFileMeta(_))
+      if (existsData != null) {
+        existsData.foreach(builder.addFileMeta(_))
+      }
       if (existsIndexes != null) {
         existsIndexes.foreach(builder.addIndexMeta(_))
       }
@@ -496,9 +500,9 @@ private[sql] object OapFileFormat {
   val PARQUET_DATA_FILE_CLASSNAME = classOf[ParquetDataFile].getCanonicalName
 
   val COMPRESSION = "oap.compression"
-  val DEFAULT_COMPRESSION = SQLConf.OAP_COMPRESSION.defaultValueString
+  val DEFAULT_COMPRESSION = OapConf.OAP_COMPRESSION.defaultValueString
   val ROW_GROUP_SIZE = "oap.rowgroup.size"
-  val DEFAULT_ROW_GROUP_SIZE = SQLConf.OAP_ROW_GROUP_SIZE.defaultValueString
+  val DEFAULT_ROW_GROUP_SIZE = OapConf.OAP_ROW_GROUP_SIZE.defaultValueString
 
   def serializeDataSourceMeta(conf: Configuration, meta: Option[DataSourceMeta]): Unit = {
     SerializationUtil.writeObjectToConfAsBase64(OAP_DATA_SOURCE_META, meta, conf)

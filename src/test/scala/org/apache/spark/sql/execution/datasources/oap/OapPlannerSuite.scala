@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -159,6 +160,22 @@ class OapPlannerSuite
       "WHERE t1.a = t2.a AND t2.a IN (1, 2, 3, 4)) " +
       "ORDER BY a"), "OapDistinctFileScanExec")
 
+    checkKeywordsNotExist(
+      sql("explain SELECT * " +
+        "FROM oap_sort_opt_table t1 " +
+        "WHERE EXISTS " +
+        "(SELECT 1 FROM oap_distinct_opt_table t2 " +
+        "WHERE t1.a = t2.a AND t1.a IN (1, 2, 3, 4)) " +
+        "ORDER BY a"), "OapDistinctFileScanExec")
+
+    // TODO: SemiJoin should enable this kind of query.
+    checkKeywordsNotExist(
+      sql("explain SELECT * " +
+        "FROM oap_sort_opt_table t1 " +
+        "WHERE EXISTS " +
+        "(SELECT 1 FROM oap_distinct_opt_table t2 " +
+        "WHERE t1.a = t2.a)"), "OapDistinctFileScanExec")
+
     checkAnswer(
       sql("SELECT * " +
       "FROM oap_sort_opt_table t1 " +
@@ -222,13 +239,53 @@ class OapPlannerSuite
     checkKeywordsExist(sql("explain " + sqlString), "*OapAggregationFileScanExec")
     val oapDF = sql(sqlString).collect()
 
-    spark.sqlContext.setConf(SQLConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "true")
+    spark.sqlContext.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "true")
     checkKeywordsNotExist(sql("explain " + sqlString), "OapAggregationFileScanExec")
     val baseDF = sql(sqlString)
 
     checkAnswer(baseDF, oapDF)
-    spark.sqlContext.setConf(SQLConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "false")
+    spark.sqlContext.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "false")
     sql("drop oindex index1 on oap_fix_length_schema_table")
+  }
+
+  test("oapStrategies does not support empty filter") {
+    spark.conf.set(OapFileFormat.ROW_GROUP_SIZE, 50)
+    val data = (1 to 300).map{ i =>
+      (i % 101, i % 37)
+    }
+    val dataRDD = spark.sparkContext.parallelize(data, 2)
+
+    dataRDD.toDF("key", "value").createOrReplaceTempView("t")
+    sql("insert overwrite table oap_fix_length_schema_table select * from t")
+    sql("create oindex index1 on oap_fix_length_schema_table (a)")
+
+    val aggQuery = "SELECT a, min(b) FROM oap_fix_length_schema_table group by a"
+    checkKeywordsNotExist(sql("explain " + aggQuery), "*OapAggregationFileScanExec")
+
+    val orderByLimitQuery = "SELECT a FROM oap_sort_opt_table ORDER BY a LIMIT 7"
+    checkKeywordsNotExist(sql("explain " + orderByLimitQuery), "*OapOrderLimitFileScanExec")
+
+    sql("drop oindex index1 on oap_fix_length_schema_table")
+  }
+
+  test("aggregations with multi filters") {
+    val sqlString =
+      "SELECT a, min(b), max(b) " +
+        "FROM oap_fix_length_schema_table " +
+        "where a < 50 and b > 3 " +
+        "group by a"
+
+    checkKeywordsNotExist(sql("explain " + sqlString), "*OapAggregationFileScanExec")
+  }
+
+  test("aggregations with filter on non-agg column") {
+    val sqlString =
+      "SELECT a, min(b), max(b) " +
+        "FROM oap_fix_length_schema_table " +
+        "where b > 3 " +
+        "group by a"
+
+    checkKeywordsNotExist(sql("explain " + sqlString), "*OapAggregationFileScanExec")
   }
 
   test("create oap index on external tables in default database") {

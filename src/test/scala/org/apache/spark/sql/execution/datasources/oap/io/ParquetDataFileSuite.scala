@@ -126,13 +126,14 @@ class SimpleDataSuite extends ParquetDataFileSuite {
     val reader = ParquetDataFile(fileName, requestSchema, configuration)
     val requiredIds = Array(0, 1)
     val rowIds = Array(0, 1, 7, 8, 120, 121, 381, 382)
-    val iterator = reader.iterator(configuration, requiredIds, rowIds)
+    val iterator = reader.iterator(requiredIds, rowIds)
     val result = ArrayBuffer[Int]()
     while (iterator.hasNext) {
       val row = iterator.next
       assert(row.numFields == 2)
       result += row.getInt(0)
     }
+    iterator.close()
     assert(rowIds.length == result.length)
     for (i <- rowIds.indices) {
       assert(rowIds(i) == result(i))
@@ -143,23 +144,25 @@ class SimpleDataSuite extends ParquetDataFileSuite {
     val reader = ParquetDataFile(fileName, requestSchema, configuration)
     val requiredIds = Array(0, 1)
     val rowIds = Array.emptyIntArray
-    val iterator = reader.iterator(configuration, requiredIds, rowIds)
+    val iterator = reader.iterator(requiredIds, rowIds)
     assert(!iterator.hasNext)
     val e = intercept[java.util.NoSuchElementException] {
       iterator.next()
     }.getMessage
+    iterator.close()
     assert(e.contains("next on empty iterator"))
   }
 
   test("read by columnIds ") {
     val reader = ParquetDataFile(fileName, requestSchema, configuration)
     val requiredIds = Array(0)
-    val iterator = reader.iterator(configuration, requiredIds)
+    val iterator = reader.iterator(requiredIds)
     val result = ArrayBuffer[ Int ]()
     while (iterator.hasNext) {
       val row = iterator.next
       result += row.getInt(0)
     }
+    iterator.close()
     val length = data.length
     assert(length == result.length)
     for (i <- 0 until length) {
@@ -234,18 +237,19 @@ class NestedDataSuite extends ParquetDataFileSuite {
     val reader = ParquetDataFile(fileName, requestStructType, configuration)
     val requiredIds = Array(0, 1, 2)
     val rowIds = Array(1)
-    val iterator = reader.iterator(configuration, requiredIds, rowIds)
+    val iterator = reader.iterator(requiredIds, rowIds)
     assert(iterator.hasNext)
     val row = iterator.next
     assert(row.numFields == 3)
     val docId = row.getLong(0)
     assert(docId == 20L)
+    iterator.close()
   }
 
   test("read all ") {
     val reader = ParquetDataFile(fileName, requestStructType, configuration)
     val requiredIds = Array(0, 2)
-    val iterator = reader.iterator(configuration, requiredIds)
+    val iterator = reader.iterator(requiredIds)
     assert(iterator.hasNext)
     val rowOne = iterator.next
     assert(rowOne.numFields == 2)
@@ -256,6 +260,7 @@ class NestedDataSuite extends ParquetDataFileSuite {
     assert(rowTwo.numFields == 2)
     val docIdTwo = rowTwo.getLong(0)
     assert(docIdTwo == 20L)
+    iterator.close()
   }
 }
 

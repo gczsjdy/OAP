@@ -17,51 +17,66 @@
 
 package org.apache.spark.sql.execution.datasources.oap.io
 
+import java.io.Closeable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.StringUtils
-import org.apache.parquet.column.Dictionary
-import org.apache.parquet.hadoop.RecordReaderBuilder
+import org.apache.parquet.hadoop.{DefaultRecordReader, OapRecordReader}
 import org.apache.parquet.hadoop.api.RecordReader
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.oap.filecache._
 import org.apache.spark.sql.execution.datasources.parquet.ParquetReadSupportHelper
 import org.apache.spark.sql.types.StructType
 
 
-private[oap] case class ParquetDataFile
-(path: String, schema: StructType, configuration: Configuration) extends DataFile {
+private[oap] case class ParquetDataFile(
+    path: String,
+    schema: StructType,
+    configuration: Configuration) extends DataFile {
 
-  def getFiberData(groupId: Int, fiberId: Int, conf: Configuration): FiberCache = {
+  def getFiberData(groupId: Int, fiberId: Int): FiberCache = {
     // TODO data cache
     throw new UnsupportedOperationException("Not support getFiberData Operation.")
   }
 
-  def iterator(conf: Configuration, requiredIds: Array[Int]): Iterator[UnsafeRow] = {
-    val recordReader = recordReaderBuilder(conf, requiredIds)
-      .buildDefault()
-    recordReader.initialize()
-    new FileRecordReaderIterator[UnsafeRow](
-      recordReader.asInstanceOf[RecordReader[UnsafeRow]])
+  def iterator(requiredIds: Array[Int]): OapIterator[InternalRow] = {
+    addRequestSchemaToConf(configuration, requiredIds)
+    val file = new Path(StringUtils.unEscapeString(path))
+    val meta: ParquetDataFileHandle = DataFileHandleCacheManager(this)
+
+    initRecordReader(
+      new DefaultRecordReader[UnsafeRow](new OapReadSupportImpl,
+        file, configuration, meta.footer))
   }
 
-  def iterator(conf: Configuration,
-               requiredIds: Array[Int],
-               rowIds: Array[Int]): Iterator[UnsafeRow] = {
+  def iterator(
+      requiredIds: Array[Int],
+      rowIds: Array[Int]): OapIterator[InternalRow] = {
     if (rowIds == null || rowIds.length == 0) {
-      Iterator.empty
+      new OapIterator(Iterator.empty)
     } else {
-      val recordReader = recordReaderBuilder(conf, requiredIds)
-        .withGlobalRowIds(rowIds).buildIndexed()
-      recordReader.initialize()
-      new FileRecordReaderIterator[UnsafeRow](
-        recordReader.asInstanceOf[RecordReader[UnsafeRow]])
+      addRequestSchemaToConf(configuration, requiredIds)
+      val file = new Path(StringUtils.unEscapeString(path))
+      val meta: ParquetDataFileHandle = DataFileHandleCacheManager(this)
+
+      initRecordReader(
+        new OapRecordReader[UnsafeRow](new OapReadSupportImpl,
+          file, configuration, rowIds, meta.footer))
     }
   }
 
-  private def recordReaderBuilder(conf: Configuration,
-                                  requiredIds: Array[Int]): RecordReaderBuilder[UnsafeRow] = {
+  private def initRecordReader(reader: RecordReader[UnsafeRow]) = {
+    reader.initialize()
+    val iterator = new FileRecordReaderIterator[UnsafeRow](reader)
+    new OapIterator[InternalRow](iterator) {
+      override def close(): Unit = iterator.close()
+    }
+  }
+
+  private def addRequestSchemaToConf(conf: Configuration, requiredIds: Array[Int]): Unit = {
     val requestSchemaString = {
       var requestSchema = new StructType
       for (index <- requiredIds) {
@@ -70,17 +85,11 @@ private[oap] case class ParquetDataFile
       requestSchema.json
     }
     conf.set(ParquetReadSupportHelper.SPARK_ROW_REQUESTED_SCHEMA, requestSchemaString)
-
-    val readSupport = new OapReadSupportImpl
-
-    val meta: ParquetDataFileHandle = DataFileHandleCacheManager(this)
-    RecordReaderBuilder
-      .builder(readSupport, new Path(StringUtils.unEscapeString(path)), conf)
-      .withFooter(meta.footer)
   }
 
-  private class FileRecordReaderIterator[V](rowReader: RecordReader[V])
-    extends Iterator[V] {
+
+  private class FileRecordReaderIterator[V](private[this] var rowReader: RecordReader[V])
+    extends Iterator[V] with Closeable {
     private[this] var havePair = false
     private[this] var finished = false
 
@@ -88,7 +97,7 @@ private[oap] case class ParquetDataFile
       if (!finished && !havePair) {
         finished = !rowReader.nextKeyValue
         if (finished) {
-          rowReader.close()
+          close()
         }
         havePair = !finished
       }
@@ -102,11 +111,19 @@ private[oap] case class ParquetDataFile
       havePair = false
       rowReader.getCurrentValue
     }
+
+    override def close(): Unit = {
+      if (rowReader != null) {
+        try {
+          rowReader.close()
+        } finally {
+          rowReader = null
+        }
+      }
+    }
   }
 
   override def createDataFileHandle(): ParquetDataFileHandle = {
     new ParquetDataFileHandle().read(configuration, new Path(StringUtils.unEscapeString(path)))
   }
-
-  override def getDictionary(fiberId: Int, conf: Configuration): Dictionary = null
 }
