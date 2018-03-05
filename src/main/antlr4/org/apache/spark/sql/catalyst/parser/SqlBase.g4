@@ -154,7 +154,7 @@ statement
         partitionSpec?                                                 #oapCreateIndex
     | DROP SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
         partitionSpec?                                                 #oapDropIndex
-    | DISABLE SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
+    | DISABLE SINDEX (IF EXISTS)? IDENTIFIER_WITH_COMMA ON tableIdentifier
         partitionSpec?                                                 #oapDisableIndex
     | SHOW SINDEX (FROM | IN) tableIdentifier                          #oapShowIndex
     | CHECK SINDEX ON tableIdentifier partitionSpec?                   #oapCheckIndex
@@ -720,6 +720,7 @@ nonReserved
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
     | CHECK
+    | DISABLE
     ;
 
 SELECT: 'SELECT';
@@ -829,6 +830,7 @@ TRANSACTION: 'TRANSACTION';
 COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
 MACRO: 'MACRO';
+DISABLE: 'DISABLE';
 
 IF: 'IF';
 
@@ -995,6 +997,10 @@ BIGDECIMAL_LITERAL
 
 IDENTIFIER
     : (LETTER | DIGIT | '_')+
+    ;
+
+IDENTIFIER_WITH_COMMA
+    : (IDENTIFIER)+ (',' (IDENTIFIER)+)?
     ;
 
 BACKQUOTED_IDENTIFIER

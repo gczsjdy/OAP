@@ -20,12 +20,11 @@ package org.apache.spark.sql.execution.datasources.oap.index
 import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
+import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.oap.SharedOapContext
 import org.apache.spark.util.Utils
@@ -264,6 +263,24 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
     ic.clear()
 
     ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa, idxb")
+    assert(ic.getScanners.isEmpty)
+  }
+
+  test("Allow to disable specific indices by DDL") {
+    sql("create oindex idxa on oap_test(a)")
+    sql("create oindex idxb on oap_test(b)")
+
+    val oapMeta = DataSourceMeta.initialize(path, configuration)
+    val ic = new IndexContext(oapMeta)
+    val filters: Array[Filter] = Array(EqualTo("a", 8), EqualTo("b", 9))
+    ScannerBuilder.build(filters, ic, Map.empty, 2)
+    assert(ic.getScanners.get.scanners.length == 2)
+    ic.clear()
+
+    // There shouldn't be whitespaces between index names while using DDL
+    sql("disable oindex idxa,idxb on oap_test")
+    assert(spark.conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key) == "idxa,idxb")
+    ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa,idxb")
     assert(ic.getScanners.isEmpty)
   }
 }
