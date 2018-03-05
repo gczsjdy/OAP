@@ -24,7 +24,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.expressions.{SortDirection, UnsafeRow}
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.io.OapIndexInfo
@@ -380,4 +379,3 @@ private[oap] class IndexScanners(val scanners: Seq[IndexScanner])
   override def toString(): String = scanners.map(_.toString()).mkString("|")
 
 }
-

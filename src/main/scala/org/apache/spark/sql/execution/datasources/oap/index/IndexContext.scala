@@ -21,12 +21,10 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.oap._
-import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -64,7 +62,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
         case BTreeIndex(entries) if entries.length == 1 =>
           val attribute = meta.schema(entries(0).ordinal).name
           if (intervalMap.contains(attribute)) {
-            availableIndexes.append((0, indexMeta) )
+            availableIndexes.append((0, indexMeta))
           }
         case BTreeIndex(entries) =>
           var num = 0 // the number of matched column
@@ -97,7 +95,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
         case BitMapIndex(entries) =>
           for (entry <- entries) {
             if (intervalMap.contains(meta.schema(entry).name)) {
-              availableIndexes.append((entries.indexOf(entry), indexMeta) )
+              availableIndexes.append((entries.indexOf(entry), indexMeta))
             }
           }
         case other => // TODO support other types of index
