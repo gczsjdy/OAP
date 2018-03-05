@@ -21,8 +21,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.sql._
