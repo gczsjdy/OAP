@@ -265,9 +265,7 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
     assert(ic.getScanners.get.scanners.length == 2)
     ic.clear()
 
-    spark.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, "idxa,idxb")
-    ScannerBuilder.build(filters, ic, Map.empty, 1, spark.conf)
+    ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa, idxb")
     assert(ic.getScanners.isEmpty)
-    spark.conf.unset(OapConf.OAP_INDEX_DISABLE_LIST.key)
   }
 }

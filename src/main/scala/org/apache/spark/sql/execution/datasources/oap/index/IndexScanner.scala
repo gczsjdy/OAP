@@ -19,8 +19,10 @@ package org.apache.spark.sql.execution.datasources.oap.index
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.expressions.{SortDirection, UnsafeRow}
@@ -298,7 +300,7 @@ private[oap] object ScannerBuilder extends Logging {
       ic: IndexContext,
       scannerOptions: Map[String, String] = Map.empty,
       maxChooseSize: Int = 1,
-      conf: RuntimeConfig = null): Array[Filter] = {
+      indexDisableList: String = ""): Array[Filter] = {
     if (filters == null || filters.isEmpty) {
       return filters
     }
@@ -320,7 +322,7 @@ private[oap] object ScannerBuilder extends Logging {
       intervalMap.foreach(intervals =>
         logDebug("\t" + intervals._1 + ": " + intervals._2.mkString(" - ")))
 
-      ic.buildScanners(intervalMap, scannerOptions, maxChooseSize, conf)
+      ic.buildScanners(intervalMap, scannerOptions, maxChooseSize, indexDisableList)
     }
 
     filters.filterNot(canSupport(_, ic))

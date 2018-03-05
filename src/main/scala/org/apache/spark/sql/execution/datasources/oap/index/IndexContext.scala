@@ -55,14 +55,9 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
 
   private def selectAvailableIndex(
       intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]],
-      conf: RuntimeConfig): Unit = {
+      indexDisableListStr: String): Unit = {
     logDebug("Selecting Available Index:")
-    val indexDisableList = if (conf == null) {
-      Seq("")
-    } else {
-      conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key, OapConf.OAP_INDEX_DISABLE_LIST.defaultValue.get)
-        .split(",").map(_.trim).toSeq
-    }
+    val indexDisableList = indexDisableListStr.split(",").map(_.trim).toSeq
 
     meta.indexMetas.filterNot(meta => indexDisableList.contains(meta.name)).foreach {
       indexMeta => indexMeta.indexType match {
@@ -73,7 +68,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
           }
         case BTreeIndex(entries) =>
           var num = 0 // the number of matched column
-        var flag = 0
+          var flag = 0
           // flag (terminated indication):
           // 0 -> Equivalence column; 1 -> Range column; 2 -> Absent column
           for (entry <- entries if flag == 0) {
@@ -97,7 +92,7 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
             num += 1
           }
           if (num > 0) {
-            availableIndexes.append((num-1, indexMeta))
+            availableIndexes.append((num - 1, indexMeta))
           }
         case BitMapIndex(entries) =>
           for (entry <- entries) {
@@ -199,8 +194,8 @@ private[oap] class IndexContext(meta: DataSourceMeta) extends Logging {
       intervalMap: mutable.HashMap[String, ArrayBuffer[RangeInterval]],
       options: Map[String, String] = Map.empty,
       maxChooseSize: Int = 1,
-      conf: RuntimeConfig = null): Unit = {
-    selectAvailableIndex(intervalMap, conf)
+      indexDisableList: String = ""): Unit = {
+    selectAvailableIndex(intervalMap, indexDisableList)
     val availableIndexers = getAvailableIndexers(intervalMap.size, maxChooseSize)
 
     //    intervalArray.sortWith(compare)
