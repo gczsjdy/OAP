@@ -19,11 +19,10 @@ package org.apache.spark.sql.execution.datasources.oap.index
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.RuntimeConfig
 import org.apache.spark.sql.catalyst.expressions.{SortDirection, UnsafeRow}
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.io.OapIndexInfo
@@ -297,7 +296,7 @@ private[oap] object ScannerBuilder extends Logging {
       ic: IndexContext,
       scannerOptions: Map[String, String] = Map.empty,
       maxChooseSize: Int = 1,
-      conf: Option[Configuration] = None): Array[Filter] = {
+      conf: RuntimeConfig = null): Array[Filter] = {
     if (filters == null || filters.isEmpty) return filters
     logDebug("Transform filters into Intervals:")
     val intervalMapArray = filters.map(optimizeFilterBound(_, ic))
