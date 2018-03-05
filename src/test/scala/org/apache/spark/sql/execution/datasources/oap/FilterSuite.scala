@@ -35,6 +35,19 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   import testImplicits._
 
   private var currentPath: String = _
+  private var defaultEis: Boolean = true
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    // In this suite we don't want to skip index even if the cost is higher.
+    defaultEis = sqlConf.getConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION)
+    sqlConf.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION, false)
+  }
+
+  override def afterAll(): Unit = {
+    sqlConf.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION, defaultEis)
+    super.afterAll()
+  }
 
   override def beforeEach(): Unit = {
     val path = Utils.createTempDir().getAbsolutePath
@@ -741,9 +754,9 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("filtering null key") {
-    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map(i =>
-      if (i <= 5) Seq(null, s"this is row $i")
-      else Seq(i, s"this is row $i")).map(Row.fromSeq)
+    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map { i =>
+      if (i <= 5) Seq(null, s"this is row $i") else Seq(i, s"this is row $i")
+     }.map(Row.fromSeq)
     val schema =
       StructType(
         StructField("a", IntegerType) ::
@@ -774,9 +787,9 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("filtering null key in Parquet format") {
-    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map(i =>
-      if (i <= 5) Seq(null, s"this is row $i")
-      else Seq(i, s"this is row $i")).map(Row.fromSeq)
+    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map { i =>
+      if (i <= 5) Seq(null, s"this is row $i") else Seq(i, s"this is row $i")
+    }.map(Row.fromSeq)
     val schema =
       StructType(
         StructField("a", IntegerType) ::
@@ -807,9 +820,9 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("filtering non-null key") {
-    val rowRDD = spark.sparkContext.parallelize(1 to 10).map(i =>
-      if (i <= 3) Seq(null, s"this is row $i")
-      else Seq(i, s"this is row $i")).map(Row.fromSeq)
+    val rowRDD = spark.sparkContext.parallelize(1 to 10).map { i =>
+      if (i <= 3) Seq(null, s"this is row $i") else Seq(i, s"this is row $i")
+    }.map(Row.fromSeq)
     val schema =
       StructType(
         StructField("a", IntegerType) ::
@@ -833,9 +846,9 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("filtering non-null key in Parquet format") {
-    val rowRDD = spark.sparkContext.parallelize(1 to 10).map(i =>
-      if (i <= 3) Seq(null, s"this is row $i")
-      else Seq(i, s"this is row $i")).map(Row.fromSeq)
+    val rowRDD = spark.sparkContext.parallelize(1 to 10).map { i =>
+      if (i <= 3) Seq(null, s"this is row $i") else Seq(i, s"this is row $i")
+    }.map(Row.fromSeq)
     val schema =
       StructType(
         StructField("a", IntegerType) ::
@@ -859,9 +872,9 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("filtering null key and normal key mixed") {
-    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map(i =>
-      if (i <= 5) Seq(null, s"this is row $i")
-      else Seq(i, s"this is row $i")).map(Row.fromSeq)
+    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map { i =>
+      if (i <= 5) Seq(null, s"this is row $i") else Seq(i, s"this is row $i")
+    }.map(Row.fromSeq)
     val schema =
       StructType(
         StructField("a", IntegerType) ::
@@ -882,9 +895,9 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("filtering null key and normal key mixed in Parquet format") {
-    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map(i =>
-      if (i <= 5) Seq(null, s"this is row $i")
-      else Seq(i, s"this is row $i")).map(Row.fromSeq)
+    val rowRDD = spark.sparkContext.parallelize(1 to 100, 3).map { i =>
+      if (i <= 5) Seq(null, s"this is row $i") else Seq(i, s"this is row $i")
+    }.map(Row.fromSeq)
     val schema =
       StructType(
         StructField("a", IntegerType) ::
