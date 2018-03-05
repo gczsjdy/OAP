@@ -191,15 +191,17 @@ private[oap] object ScannerBuilder extends Logging {
         attribute match {
           case ic (filterOptimizer) => // extract the corresponding scannerBuilder
             // combine all intervals of the same attribute of leftMap and rightMap
-            if (needMerge) leftMap.put(attribute,
-              filterOptimizer.mergeBound(leftMap.getOrElseUpdate (attribute, null), intervals) )
-            // add bound of the same attribute to the left map
-            else leftMap.put(attribute,
-              filterOptimizer.addBound(leftMap.getOrElse (attribute, null), intervals) )
+            if (needMerge) {
+              leftMap.put(attribute,
+                filterOptimizer.mergeBound(leftMap.getOrElseUpdate (attribute, null), intervals))
+            } else {
+              // add bound of the same attribute to the left map
+              leftMap.put(attribute,
+                filterOptimizer.addBound(leftMap.getOrElse (attribute, null), intervals))
+            }
           case _ => // this attribute does not exist, do nothing
         }
-      }
-      else {
+      } else {
         leftMap.put(attribute, intervals)
       }
     }
@@ -296,23 +298,30 @@ private[oap] object ScannerBuilder extends Logging {
       filters: Array[Filter],
       ic: IndexContext,
       scannerOptions: Map[String, String] = Map.empty,
-      maxChooseSize: Int = 1): Array[Filter] = {
-    if (filters == null || filters.isEmpty) return filters
+      maxChooseSize: Int = 1,
+      indexDisableList: String = ""): Array[Filter] = {
+    if (filters == null || filters.isEmpty) {
+      return filters
+    }
     logDebug("Transform filters into Intervals:")
     val intervalMapArray = filters.map(optimizeFilterBound(_, ic))
     // reduce multiple hashMap to one hashMap("AND" operation)
     val intervalMap = intervalMapArray.reduce(
       (leftMap, rightMap) =>
-        if (leftMap == null || leftMap.isEmpty) rightMap
-        else if (rightMap == null || rightMap.isEmpty) leftMap
-        else combineIntervalMaps(leftMap, rightMap, ic, needMerge = true)
+        if (leftMap == null || leftMap.isEmpty) {
+          rightMap
+        } else if (rightMap == null || rightMap.isEmpty) {
+          leftMap
+        } else {
+          combineIntervalMaps(leftMap, rightMap, ic, needMerge = true)
+        }
     )
 
     if (intervalMap.nonEmpty) {
       intervalMap.foreach(intervals =>
         logDebug("\t" + intervals._1 + ": " + intervals._2.mkString(" - ")))
 
-      ic.buildScanners(intervalMap, scannerOptions, maxChooseSize)
+      ic.buildScanners(intervalMap, scannerOptions, maxChooseSize, indexDisableList)
     }
 
     filters.filterNot(canSupport(_, ic))
@@ -349,13 +358,15 @@ private[oap] class IndexScanners(val scanners: Seq[IndexScanner])
       case 0 => Iterator.empty
       case 1 =>
         actualUsedScanners.head.initialize(dataPath, conf)
-        actualUsedScanners.head.toArray.iterator
       case _ =>
         actualUsedScanners.par.foreach(_.initialize(dataPath, conf))
         actualUsedScanners.map(_.toSet)
           .reduce((left, right) => {
-            if (left.isEmpty || right.isEmpty) Set.empty
-            else left.intersect(right)
+            if (left.isEmpty || right.isEmpty) {
+              Set.empty
+            } else {
+              left.intersect(right)
+            }
           }).iterator
     }
     this
@@ -368,4 +379,3 @@ private[oap] class IndexScanners(val scanners: Seq[IndexScanner])
   override def toString(): String = scanners.map(_.toString()).mkString("|")
 
 }
-

@@ -258,7 +258,8 @@ private[sql] class OapFileFormat extends FileFormat
             // get index options such as limit, order, etc.
             val indexOptions = options.filterKeys(OapFileFormat.oapOptimizationKeySeq.contains(_))
             val maxChooseSize = sparkSession.conf.get(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE)
-            ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize)
+            val indexDisableList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST)
+            ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize, indexDisableList)
           }
         }
 
@@ -274,10 +275,6 @@ private[sql] class OapFileFormat extends FileFormat
         val requiredIds = requiredSchema.map(dataSchema.fields.indexOf(_)).toArray
         val pushed = FilterHelper.tryToPushFilters(sparkSession, requiredSchema, filters)
 
-        hadoopConf.setDouble(OapConf.OAP_FULL_SCAN_THRESHOLD.key,
-          sparkSession.conf.get(OapConf.OAP_FULL_SCAN_THRESHOLD))
-        hadoopConf.setBoolean(OapConf.OAP_ENABLE_OINDEX.key,
-          sparkSession.conf.get(OapConf.OAP_ENABLE_OINDEX))
         val broadcastedHadoopConf =
           sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -347,7 +344,9 @@ private[sql] class OapFileFormat extends FileFormat
           }
         case _ => false
       }
-    } else false
+    } else {
+      false
+    }
   }
 }
 
@@ -401,7 +400,9 @@ private[oap] class OapOutputWriterFactory(
       val oldMeta = m.get
       val existsIndexes = oldMeta.indexMetas
       val existsData = oldMeta.fileMetas
-      if (existsData != null) existsData.foreach(builder.addFileMeta(_))
+      if (existsData != null) {
+        existsData.foreach(builder.addFileMeta(_))
+      }
       if (existsIndexes != null) {
         existsIndexes.foreach(builder.addIndexMeta(_))
       }

@@ -77,7 +77,9 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
       case _ => null
     }
     assert(lastIdx == targetLastIdx)
-    if (idxMeta != null) assert(idxMeta.name equals targetIdxName)
+    if (idxMeta != null) {
+      assert(idxMeta.name equals targetIdxName)
+    }
   }
 
   test("Non-Index Test") {
@@ -248,5 +250,20 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
       availIdxs.append((indexer._1, indexer._2.name))
     }
     assert(availIdxs sameElements expectIdxs)
+  }
+
+  test("Allow to disable specific indices") {
+    sql("create oindex idxa on oap_test(a)")
+    sql("create oindex idxb on oap_test(b)")
+
+    val oapMeta = DataSourceMeta.initialize(path, configuration)
+    val ic = new IndexContext(oapMeta)
+    val filters: Array[Filter] = Array(EqualTo("a", 8), EqualTo("b", 9))
+    ScannerBuilder.build(filters, ic, Map.empty, 2)
+    assert(ic.getScanners.get.scanners.length == 2)
+    ic.clear()
+
+    ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa, idxb")
+    assert(ic.getScanners.isEmpty)
   }
 }
