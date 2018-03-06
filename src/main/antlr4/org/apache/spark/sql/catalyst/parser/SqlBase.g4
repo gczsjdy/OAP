@@ -154,7 +154,7 @@ statement
         partitionSpec?                                                 #oapCreateIndex
     | DROP SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
         partitionSpec?                                                 #oapDropIndex
-    | DISABLE SINDEX (IF EXISTS)? IDENTIFIER_WITH_COMMA ON tableIdentifier
+    | DISABLE SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
         partitionSpec?                                                 #oapDisableIndex
     | SHOW SINDEX (FROM | IN) tableIdentifier                          #oapShowIndex
     | CHECK SINDEX ON tableIdentifier partitionSpec?                   #oapCheckIndex
@@ -997,10 +997,6 @@ BIGDECIMAL_LITERAL
 
 IDENTIFIER
     : (LETTER | DIGIT | '_')+
-    ;
-
-IDENTIFIER_WITH_COMMA
-    : (IDENTIFIER)+ (',' (IDENTIFIER)+)?
     ;
 
 BACKQUOTED_IDENTIFIER

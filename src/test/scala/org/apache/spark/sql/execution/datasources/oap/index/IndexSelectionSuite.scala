@@ -277,10 +277,11 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
     assert(ic.getScanners.get.scanners.length == 2)
     ic.clear()
 
-    // There shouldn't be whitespaces between index names while using DDL
-    sql("disable oindex idxa,idxb on oap_test")
-    assert(spark.conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key) == "idxa,idxb")
-    ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa,idxb")
-    assert(ic.getScanners.isEmpty)
+    // Can only disable 1 index at a time while using DDL
+    sql("disable oindex idxa on oap_test")
+    assert(spark.conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key) == "idxa")
+    ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa")
+    assert(ic.getScanners.get.scanners.length == 1)
+
   }
 }
