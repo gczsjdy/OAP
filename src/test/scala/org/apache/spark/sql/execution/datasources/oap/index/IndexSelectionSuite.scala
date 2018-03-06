@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.datasources.oap.index
 import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
-import org.apache.spark.sql.SaveMode
+
+import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.sources._
@@ -30,7 +32,7 @@ import org.apache.spark.sql.test.oap.SharedOapContext
 import org.apache.spark.util.Utils
 
 
-class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
+class IndexSelectionSuite extends QueryTest with SharedOapContext with BeforeAndAfterEach{
 
   import testImplicits._
   private var tempDir: File = _
@@ -282,6 +284,15 @@ class IndexSelectionSuite extends SharedOapContext with BeforeAndAfterEach{
     assert(spark.conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key) == "idxa")
     ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa")
     assert(ic.getScanners.get.scanners.length == 1)
-
   }
+
+  test("Show disabled indices") {
+    sql("create oindex idxa on oap_test(a)")
+    sql("create oindex idxb on oap_test(b)")
+
+    assert(sql("show disabled oindices").collect().isEmpty)
+    sql("disable oindex idxa on oap_test")
+    checkAnswer(sql("show disabled oindices"), Seq(Row("idxa")))
+  }
+
 }

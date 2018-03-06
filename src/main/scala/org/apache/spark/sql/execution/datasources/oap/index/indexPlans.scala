@@ -689,14 +689,33 @@ case class OapDisableIndexCommand(
                   s"""Index $notExistsIndicesString does not exist on
                      | ${identifier.getOrElse(parent)}""".stripMargin)
               } else {
-                logWarning(s"drop non-exists index $notExistsIndicesString")
+                logWarning(s"disable non-exists index $notExistsIndicesString")
               }
             }
             sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, indexNames)
           }
         })
-      case other => sys.error(s"We don't support index dropping for ${other.simpleString}")
+      case other => sys.error(s"We don't support index disabling for ${other.simpleString}")
     }
     Seq.empty
+  }
+}
+
+/**
+ * Show disabled indices
+ */
+case class OapShowDisableIndicesCommand() extends RunnableCommand {
+
+  override val output: Seq[Attribute] = {
+    AttributeReference("index_name", StringType, nullable = false)() :: Nil
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val disableList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST)
+    if(disableList == "") {
+      Seq.empty
+    } else {
+      disableList.split(",").map(_.trim).map(Row(_)).toSeq
+    }
   }
 }
