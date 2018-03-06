@@ -651,7 +651,7 @@ case class OapCheckIndexCommand(
 }
 
 /**
- * Disable specific indices
+ * Disable specific index
  */
 case class OapDisableIndexCommand(
     indexNames: String,
@@ -717,5 +717,21 @@ case class OapShowDisableIndicesCommand() extends RunnableCommand {
     } else {
       disableList.split(",").map(_.trim).map(Row(_)).toSeq
     }
+  }
+}
+
+/**
+ * Enable disabled index
+ */
+case class OapEnableIndexCommand(indexName: String) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val disableList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST).split(",").map(_.trim)
+    val refreshedDisableList = disableList.filterNot(_ == indexName)
+    if (disableList.length == refreshedDisableList.length) {
+      logWarning(s"Index $indexName hasn't been disabled")
+    }
+    sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, refreshedDisableList.mkString(", "))
+    Seq.empty
   }
 }

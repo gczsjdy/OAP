@@ -156,6 +156,7 @@ statement
         partitionSpec?                                                 #oapDropIndex
     | DISABLE SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
         partitionSpec?                                                 #oapDisableIndex
+    | ENABLE SINDEX IDENTIFIER                                         #oapEnableIndex
     | SHOW SINDEX (FROM | IN) tableIdentifier                          #oapShowIndex
     | SHOW DISABLED SINDICES                                           #oapShowDisabledIndices
     | CHECK SINDEX ON tableIdentifier partitionSpec?                   #oapCheckIndex
@@ -721,7 +722,7 @@ nonReserved
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
     | CHECK
-    | DISABLE | DISABLED
+    | DISABLE | DISABLED | ENABLE
     ;
 
 SELECT: 'SELECT';
@@ -833,6 +834,7 @@ ROLLBACK: 'ROLLBACK';
 MACRO: 'MACRO';
 DISABLE: 'DISABLE';
 DISABLED: 'DISABLED';
+ENABLE: 'ENABLE';
 
 IF: 'IF';
 

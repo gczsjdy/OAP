@@ -268,7 +268,7 @@ class IndexSelectionSuite extends QueryTest with SharedOapContext with BeforeAnd
     assert(ic.getScanners.isEmpty)
   }
 
-  test("Allow to disable specific indices by DDL") {
+  test("Allow to disable specific index by DDL") {
     sql("create oindex idxa on oap_test(a)")
     sql("create oindex idxb on oap_test(b)")
 
@@ -295,4 +295,13 @@ class IndexSelectionSuite extends QueryTest with SharedOapContext with BeforeAnd
     checkAnswer(sql("show disabled oindices"), Seq(Row("idxa")))
   }
 
+  test("Enable disabled index") {
+    sql("create oindex idxa on oap_test(a)")
+    sql("create oindex idxb on oap_test(b)")
+
+    sql("disable oindex idxa on oap_test")
+    checkAnswer(sql("show disabled oindices"), Seq(Row("idxa")))
+    sql("enable oindex idxa")
+    assert(sql("show disabled oindices").collect().isEmpty)
+  }
 }

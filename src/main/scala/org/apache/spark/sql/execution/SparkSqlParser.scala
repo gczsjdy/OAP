@@ -1483,4 +1483,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   override def visitOapShowDisabledIndices(ctx: OapShowDisabledIndicesContext): LogicalPlan =
     OapShowDisableIndicesCommand()
+
+  override def visitOapEnableIndex(ctx: OapEnableIndexContext): LogicalPlan =
+    OapEnableIndexCommand(ctx.IDENTIFIER.getText)
 }
