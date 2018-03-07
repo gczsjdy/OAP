@@ -654,7 +654,7 @@ case class OapCheckIndexCommand(
  * Disable specific index
  */
 case class OapDisableIndexCommand(
-    indexNames: String,
+    indexName: String,
     table: TableIdentifier,
     allowNotExists: Boolean,
     partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
@@ -667,7 +667,7 @@ case class OapDisableIndexCommand(
     relation match {
       case LogicalRelation(HadoopFsRelation(fileCatalog, _, _, _, format, _), _, identifier)
         if format.isInstanceOf[OapFileFormat] || format.isInstanceOf[ParquetFileFormat] =>
-        logInfo(s"Disabling index $indexNames")
+        logInfo(s"Disabling index $indexName")
         val partitions = OapUtils.getPartitions(fileCatalog, partitionSpec)
         partitions.filter(_.files.nonEmpty).foreach(p => {
           val parent = p.files.head.getPath.getParent
@@ -680,19 +680,16 @@ case class OapDisableIndexCommand(
             val oldMeta = m.get
             val existsIndexNameList = oldMeta.indexMetas.map(_.name)
             val existsData = oldMeta.fileMetas
-            val indexNameList = indexNames.split(",").map(_.trim)
-            val notExistsIndexNameList = indexNameList.filterNot(existsIndexNameList.contains(_))
-            val notExistsIndicesString = notExistsIndexNameList.mkString(", ")
-            if (!notExistsIndexNameList.isEmpty) {
+            if (!existsIndexNameList.contains(indexName)) {
               if (!allowNotExists) {
                 throw new AnalysisException(
-                  s"""Index $notExistsIndicesString does not exist on
+                  s"""Index $indexName does not exist on
                      | ${identifier.getOrElse(parent)}""".stripMargin)
               } else {
-                logWarning(s"disable non-exists index $notExistsIndicesString")
+                logWarning(s"disable non-exists index $indexName")
               }
             }
-            sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, indexNames)
+            sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, indexName)
           }
         })
       case other => sys.error(s"We don't support index disabling for ${other.simpleString}")

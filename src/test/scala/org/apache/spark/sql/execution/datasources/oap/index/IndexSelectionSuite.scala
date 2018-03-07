@@ -284,6 +284,7 @@ class IndexSelectionSuite extends QueryTest with SharedOapContext with BeforeAnd
     assert(spark.conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key) == "idxa")
     ScannerBuilder.build(filters, ic, Map.empty, 1, "idxa")
     assert(ic.getScanners.get.scanners.length == 1)
+    spark.conf.unset(OapConf.OAP_INDEX_DISABLE_LIST.key)
   }
 
   test("Show disabled indices") {
