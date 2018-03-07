@@ -154,11 +154,9 @@ statement
         partitionSpec?                                                 #oapCreateIndex
     | DROP SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
         partitionSpec?                                                 #oapDropIndex
-    | DISABLE SINDEX (IF EXISTS)? IDENTIFIER ON tableIdentifier
-        partitionSpec?                                                 #oapDisableIndex
+    | DISABLE SINDEX IDENTIFIER                                        #oapDisableIndex
     | ENABLE SINDEX IDENTIFIER                                         #oapEnableIndex
     | SHOW SINDEX (FROM | IN) tableIdentifier                          #oapShowIndex
-    | SHOW DISABLED SINDICES                                           #oapShowDisabledIndices
     | CHECK SINDEX ON tableIdentifier partitionSpec?                   #oapCheckIndex
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
@@ -722,7 +720,7 @@ nonReserved
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
     | CHECK
-    | DISABLE | DISABLED | ENABLE
+    | DISABLE | ENABLE
     ;
 
 SELECT: 'SELECT';
@@ -833,7 +831,6 @@ COMMIT: 'COMMIT';
 ROLLBACK: 'ROLLBACK';
 MACRO: 'MACRO';
 DISABLE: 'DISABLE';
-DISABLED: 'DISABLED';
 ENABLE: 'ENABLE';
 
 IF: 'IF';

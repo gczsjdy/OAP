@@ -444,7 +444,8 @@ case class OapShowIndexCommand(table: TableIdentifier, relationName: String)
       AttributeReference("seq_in_index", IntegerType, nullable = false)() ::
       AttributeReference("column_name", StringType, nullable = false)() ::
       AttributeReference("collation", StringType, nullable = true)() ::
-      AttributeReference("index_type", StringType, nullable = false)() :: Nil
+      AttributeReference("index_type", StringType, nullable = false)() ::
+      AttributeReference("enabled", BooleanType, nullable = false)() :: Nil
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -478,14 +479,19 @@ case class OapShowIndexCommand(table: TableIdentifier, relationName: String)
         Nil
       }
     }).groupBy(_.name).map(_._2.head)
+    val disableIndexList =
+      sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST).split(",").map(_.trim)
     indices.toSeq.flatMap(i => i.indexType match {
       case BTreeIndex(entries) =>
+        val enabled = !disableIndexList.contains(i.name)
         entries.zipWithIndex.map(ei => {
           val dir = if (ei._1.dir == Ascending) "A" else "D"
-          Row(relationName, i.name, ei._2, schema(ei._1.ordinal).name, dir, "BTREE")})
+          Row(relationName, i.name, ei._2, schema(ei._1.ordinal).name, dir, "BTREE", enabled)
+        })
       case BitMapIndex(entries) =>
+        val enabled = !disableIndexList.contains(i.name)
         entries.zipWithIndex.map(ei =>
-          Row(relationName, i.name, ei._2, schema(ei._1).name, "A", "BITMAP"))
+          Row(relationName, i.name, ei._2, schema(ei._1).name, "A", "BITMAP", enabled))
       case t => sys.error(s"not support index type $t for index ${i.name}")
     })
   }
@@ -653,67 +659,18 @@ case class OapCheckIndexCommand(
 /**
  * Disable specific index
  */
-case class OapDisableIndexCommand(
-    indexName: String,
-    table: TableIdentifier,
-    allowNotExists: Boolean,
-    partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
+case class OapDisableIndexCommand(indexName: String) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val qe = sparkSession.sessionState.executePlan(UnresolvedRelation(table))
-    qe.assertAnalyzed()
-    val relation = qe.optimizedPlan
-
-    relation match {
-      case LogicalRelation(HadoopFsRelation(fileCatalog, _, _, _, format, _), _, identifier)
-        if format.isInstanceOf[OapFileFormat] || format.isInstanceOf[ParquetFileFormat] =>
-        logInfo(s"Disabling index $indexName")
-        val partitions = OapUtils.getPartitions(fileCatalog, partitionSpec)
-        partitions.filter(_.files.nonEmpty).foreach(p => {
-          val parent = p.files.head.getPath.getParent
-          // TODO get `fs` outside of foreach() to boost
-          val fs = parent.getFileSystem(sparkSession.sparkContext.hadoopConfiguration)
-          if (fs.exists(new Path(parent, OapFileFormat.OAP_META_FILE))) {
-            val metaBuilder = new DataSourceMetaBuilder()
-            val m = OapUtils.getMeta(sparkSession.sparkContext.hadoopConfiguration, parent)
-            assert(m.nonEmpty)
-            val oldMeta = m.get
-            val existsIndexNameList = oldMeta.indexMetas.map(_.name)
-            val existsData = oldMeta.fileMetas
-            if (!existsIndexNameList.contains(indexName)) {
-              if (!allowNotExists) {
-                throw new AnalysisException(
-                  s"""Index $indexName does not exist on
-                     | ${identifier.getOrElse(parent)}""".stripMargin)
-              } else {
-                logWarning(s"disable non-exists index $indexName")
-              }
-            }
-            sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, indexName)
-          }
-        })
-      case other => sys.error(s"We don't support index disabling for ${other.simpleString}")
-    }
-    Seq.empty
-  }
-}
-
-/**
- * Show disabled indices
- */
-case class OapShowDisableIndicesCommand() extends RunnableCommand {
-
-  override val output: Seq[Attribute] = {
-    AttributeReference("index_name", StringType, nullable = false)() :: Nil
-  }
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val disableList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST)
-    if(disableList == "") {
-      Seq.empty
+    val beforeList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST.key)
+      .split(",").map(_.trim).filterNot(_ == "") // The filter deals with empty String
+    val afterList = if (beforeList.contains(indexName)) {
+      beforeList
     } else {
-      disableList.split(",").map(_.trim).map(Row(_)).toSeq
+      beforeList :+ indexName
     }
+    sparkSession.conf.set(OapConf.OAP_INDEX_DISABLE_LIST.key, afterList.mkString(", "))
+    Seq.empty
   }
 }
 

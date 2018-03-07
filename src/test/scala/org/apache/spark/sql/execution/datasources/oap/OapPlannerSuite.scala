@@ -309,7 +309,7 @@ class OapPlannerSuite
         assert(tmpDir.listFiles.nonEmpty)
         checkAnswer(sql(s"create oindex idxa on $tabName(a)"), Nil)
 
-        checkAnswer(sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE"))
+        checkAnswer(sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE", true))
         sql(s"DROP TABLE $tabName")
         assert(tmpDir.listFiles.nonEmpty)
       }
@@ -337,7 +337,8 @@ class OapPlannerSuite
         assert(tmpDir.listFiles.nonEmpty)
         checkAnswer(sql(s"create oindex idxa on $tabName(a)"), Nil)
 
-        checkAnswer(sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE"))
+        checkAnswer(
+          sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE", true))
 
         sql(s"drop oindex idxa on $tabName")
         checkAnswer(sql(s"show oindex from $tabName"), Nil)
@@ -368,14 +369,16 @@ class OapPlannerSuite
         assert(tmpDir.listFiles.nonEmpty)
         checkAnswer(sql(s"create oindex idxa on $tabName(a)"), Nil)
 
-        checkAnswer(sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE"))
+        checkAnswer(
+          sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE", true))
 
         // test refresh oap index
         (500 to 600).map { i => (i, s"this is test $i") }.toDF("a", "b")
           .createOrReplaceTempView("t2")
         sql(s"insert into table $tabName select * from t2")
         sql(s"refresh oindex on $tabName")
-        checkAnswer(sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE"))
+        checkAnswer(
+          sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE", true))
         checkAnswer(sql(s"select a from $tabName where a=555"), Row(555))
         sql(s"DROP TABLE $tabName")
         assert(tmpDir.listFiles.nonEmpty)
@@ -404,7 +407,8 @@ class OapPlannerSuite
         assert(tmpDir.listFiles.nonEmpty)
         checkAnswer(sql(s"create oindex idxa on $tabName(a)"), Nil)
 
-        checkAnswer(sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE"))
+        checkAnswer(
+          sql(s"show oindex from $tabName"), Row(tabName, "idxa", 0, "a", "A", "BTREE", true))
 
         // test check oap index
         checkAnswer(sql(s"check oindex on $tabName"), Nil)
