@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.rpc.OapMessages.CacheDrop
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
-import org.apache.spark.rpc.OapRpcUtils
+import org.apache.spark.rpc.OapRpcManagerMaster
 import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.oap.OapConf
@@ -217,7 +217,7 @@ case class DropIndexCommand(
 
     sparkSession.sparkContext.schedulerBackend match {
       case scheduler: CoarseGrainedSchedulerBackend =>
-          OapRpcUtils.sendMessageToExecutors(scheduler, CacheDrop(indexName))
+          OapRpcManagerMaster.sendOapMessage(CacheDrop(indexName))
       case _: LocalSchedulerBackend => FiberCacheManager.removeIndexCache(indexName)
     }
 

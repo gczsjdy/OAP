@@ -17,52 +17,44 @@
 
 package org.apache.spark.rpc
 
-import scala.collection.mutable
-
-import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
-import org.apache.spark.util.Utils
 
-private[spark] object OapRpcUtils extends Logging {
+private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
 
-  private lazy val executorDataMapField =
-    classOf[CoarseGrainedSchedulerBackend].getDeclaredFields.find(
-      filed => filed.getName.endsWith("executorDataMap"))
-
-  def sendMessageToExecutors(
-      scheduler: CoarseGrainedSchedulerBackend, message: OapMessage): Unit = {
-    // TODO: why we can't just use executorDataMap?
-    executorDataMapField match {
-      case Some(field) =>
-        field.setAccessible(true)
-        val executorDataMap =
-          field.get(scheduler).asInstanceOf[mutable.HashMap[String, AnyRef]]
+  private def sendMessageToExecutors(message: OapMessage): Unit = {
+    val scheduler = SparkSession.builder().getOrCreate().sparkContext.schedulerBackend
+    scheduler match {
+      case scheduler: CoarseGrainedSchedulerBackend =>
+        val executorDataMap = scheduler.executorDataMap
         for ((_, executorData) <- executorDataMap) {
-          val c = Utils.classForName("org.apache.spark.scheduler.cluster.ExecutorData")
-          val executorEndpointField = c.getDeclaredField("executorEndpoint")
-          executorEndpointField.setAccessible(true)
-          val executorEndpoint =
-            executorEndpointField.get(executorData).asInstanceOf[RpcEndpointRef]
-          executorEndpoint.send(message)
+          executorData.executorEndpoint.send(message)
         }
-      case _ => throw new NoSuchFieldException("CoarseGrainedSchedulerBackend.executorDataMap")
+      case _ => throw new IllegalArgumentException("Not CoarseGrainedSchedulerBackend")
     }
   }
 
-  def handleDummyMessage(message: OapDummyMessage): Unit = message match {
+  private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
     case DummyMessage(someContent) => logWarning("Dummy~")
   }
 
-  def handleCacheMessage(message: OapCacheMessage): Unit = message match {
+  private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
     case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
   }
 
-  def handleOapMessage(message: OapMessage): Unit = message match {
+  override def handleOapMessage(message: OapMessage): Unit = message match {
     case dummyMessage: OapDummyMessage => handleDummyMessage(dummyMessage)
     case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
   }
 
-  def sendOapMessage()
+  private def sendDummyMessage(message: OapDummyMessage): Unit = message match {
+    case dummyMessage: DummyMessage => sendMessageToExecutors(dummyMessage)
+  }
+
+  override def sendOapMessage(message: OapMessage): Unit = message match {
+    case dummyMessage: OapDummyMessage => sendDummyMessage(dummyMessage)
+    case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
+  }
 }

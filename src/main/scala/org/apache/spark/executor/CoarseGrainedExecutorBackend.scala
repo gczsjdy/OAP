@@ -33,7 +33,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.rpc.{OapMessage, OapRpcUtils}
+import org.apache.spark.rpc.{OapMessage, OapRpcManagerMaster}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
@@ -124,7 +124,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
       }.start()
 
-    case message: OapMessage => OapRpcUtils.handleOapMessage(message)
+    case message: OapMessage => OapRpcManagerMaster.handleOapMessage(message)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
