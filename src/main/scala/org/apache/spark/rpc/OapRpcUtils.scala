@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap
+package org.apache.spark.rpc
 
 import scala.collection.mutable
 
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.sql.execution.datasources.oap.OapMessages.CacheDrop
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 import org.apache.spark.util.Utils
 
-private[spark] object OapMessageUtils {
+private[spark] object OapRpcUtils extends Logging {
 
   private lazy val executorDataMapField =
     classOf[CoarseGrainedSchedulerBackend].getDeclaredFields.find(
@@ -51,8 +51,18 @@ private[spark] object OapMessageUtils {
     }
   }
 
-  def handleOapMessage(message: OapMessage): Unit = message match {
-    case CacheDrop(indexName) =>
-      FiberCacheManager.removeIndexCache(indexName)
+  def handleDummyMessage(message: OapDummyMessage): Unit = message match {
+    case DummyMessage(someContent) => logWarning("Dummy~")
   }
+
+  def handleCacheMessage(message: OapCacheMessage): Unit = message match {
+    case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
+  }
+
+  def handleOapMessage(message: OapMessage): Unit = message match {
+    case dummyMessage: OapDummyMessage => handleDummyMessage(dummyMessage)
+    case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
+  }
+
+  def sendOapMessage()
 }

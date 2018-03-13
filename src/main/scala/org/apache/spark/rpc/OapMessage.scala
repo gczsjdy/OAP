@@ -15,10 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap
+package org.apache.spark.rpc
 
 private[spark] sealed trait OapMessage extends Serializable
 
+private[spark] sealed trait OapDummyMessage extends OapMessage
+
+private[spark] sealed trait OapCacheMessage extends OapMessage
+private[spark] sealed trait OapIndexMessage extends OapMessage
+private[spark] sealed trait OapMetricsMessage extends OapMessage
+
 private[spark] object OapMessages {
-  case class CacheDrop(indexName: String) extends OapMessage
+  case class DummyMessage(someContent: String) extends OapDummyMessage
+  case class CacheDrop(indexName: String) extends OapCacheMessage
 }
