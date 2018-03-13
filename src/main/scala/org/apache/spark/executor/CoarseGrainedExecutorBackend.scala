@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -33,7 +34,6 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.rpc.{OapMessage, OapRpcManagerMaster}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
@@ -124,7 +124,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
       }.start()
 
-    case message: OapMessage => OapRpcManagerMaster.handleOapMessage(message)
+    case message: OapMessage => OapRpcManagerSlave.handleOapMessage(message)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

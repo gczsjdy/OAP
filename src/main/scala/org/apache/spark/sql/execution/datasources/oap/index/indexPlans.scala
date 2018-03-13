@@ -18,9 +18,13 @@
 package org.apache.spark.sql.execution.datasources.oap.index
 
 import scala.collection.mutable
+
 import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.rpc.OapMessages.CacheDrop
+import org.apache.spark.rpc.OapRpcManagerMaster
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.sql._
@@ -32,9 +36,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.oap._
-import org.apache.spark.rpc.OapMessages.CacheDrop
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
-import org.apache.spark.rpc.OapRpcManagerMaster
 import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.oap.OapConf

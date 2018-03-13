@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManage
 private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
 
   private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
-    case DummyMessage(someContent) => logWarning(s"Dummy~ The content is $someContent")
+    case DummyMessage(someContent) => logWarning(s"Dummy message on Executor: $someContent")
   }
 
   private def handleCacheMessage(message: OapCacheMessage): Unit = message match {

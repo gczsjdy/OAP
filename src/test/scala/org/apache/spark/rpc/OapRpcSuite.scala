@@ -20,10 +20,10 @@ package org.apache.spark.rpc
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.rpc.OapMessages.DummyMessage
-import org.apache.spark.sql.test.oap.SharedOapContext
+import org.apache.spark.sql.test.oap.{SharedOapLocalClusterContext}
 import org.apache.spark.sql.QueryTest
 
-class OapRpcSuite extends QueryTest with SharedOapContext with BeforeAndAfterEach {
+class OapRpcSuite extends QueryTest with SharedOapLocalClusterContext with BeforeAndAfterEach {
 
   test("Driver to Executor") {
     OapRpcManagerMaster.sendOapMessage(DummyMessage("he is a wanderer"))
