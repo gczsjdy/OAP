@@ -17,10 +17,7 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 
 private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {

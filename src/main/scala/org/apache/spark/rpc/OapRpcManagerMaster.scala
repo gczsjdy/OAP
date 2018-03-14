@@ -48,6 +48,7 @@ private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
   }
 
   private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
+    // Currently not deal with this
     case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
   }
 
