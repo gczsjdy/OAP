@@ -17,11 +17,12 @@
 
 package org.apache.spark.rpc
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.scheduler.SchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
-private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
+private[spark] object OapRpcManagerMaster extends OapRpcManagerBase with Logging {
 
   private var _scheduler: Option[SchedulerBackend] = None
 
@@ -45,7 +46,11 @@ private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
   }
 
   private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
-    case DummyMessage(someContent) => logWarning(s"Dummy message received on Driver: $someContent")
+    case DummyMessage(someContent) =>
+      logWarning(s"Dummy message received on Driver: $someContent")
+    case DummyMessageWithId(executorId, someContent) =>
+      logWarning(s"Dummy message from $executorId received on Driver: $someContent")
+      statusKeeper.dummyStatusMap += executorId -> someContent
   }
 
   private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
@@ -64,5 +69,10 @@ private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
   override def sendOapMessage(message: OapMessage): Unit = message match {
     case dummyMessage: OapDummyMessage => sendDummyMessage(dummyMessage)
     case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
+  }
+
+  // Just for test/debug
+  def printKeptStatus: Unit = {
+    statusKeeper.dummyStatusMap.foreach{x => logWarning(x.toString)}
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.rpc.OapMessages.DummyMessage
+import org.apache.spark.rpc.OapMessages.{DummyMessage, DummyMessageWithId}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.sql.SparkSession
 
@@ -37,6 +37,17 @@ object TestOapRpc {
     OapRpcManagerSlave.sendOapMessage(DummyMessage("I am a slave"))
   }
 
+  def testSendMessageExecutorToDriverWithStatusKept: Unit = {
+    OapRpcManagerSlave.registerDriverEndpoint(
+      spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+        .driverEndpoint)
+    OapRpcManagerSlave.sendOapMessage(DummyMessageWithId("666", "I am a slave"))
+  }
+
+  def testPrintStatusKeeperMap: Unit = {
+    OapRpcManagerMaster.printKeptStatus
+  }
+
   def main(args: Array[String]): Unit = {
     // Waiting for ExecutorRegister done
     Thread.sleep(10000)
@@ -44,6 +55,11 @@ object TestOapRpc {
     testSendMessageDriverToExecutor
 
     testSendMessageExecutorToDriver
+
+    testSendMessageExecutorToDriverWithStatusKept
+
+    Thread.sleep(3000)
+    testPrintStatusKeeperMap
 
     Thread.sleep(3000)
   }

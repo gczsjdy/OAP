@@ -17,16 +17,10 @@
 
 package org.apache.spark.rpc
 
-private[spark] sealed trait OapMessage extends Serializable
+import scala.collection.mutable
 
-private[spark] sealed trait OapDummyMessage extends OapMessage
+object RpcRelatedStatusKeeper {
 
-private[spark] sealed trait OapCacheMessage extends OapMessage
-private[spark] sealed trait OapIndexMessage extends OapMessage
-private[spark] sealed trait OapMetricsMessage extends OapMessage
+  private[rpc] val dummyStatusMap = mutable.Map[String, String]()
 
-private[spark] object OapMessages {
-  case class DummyMessage(someContent: String) extends OapDummyMessage
-  case class DummyMessageWithId(executorId: String, someContent: String) extends OapDummyMessage
-  case class CacheDrop(indexName: String) extends OapCacheMessage
 }
