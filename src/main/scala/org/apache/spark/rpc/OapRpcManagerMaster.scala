@@ -20,13 +20,14 @@ package org.apache.spark.rpc
 import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.scheduler.SchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 
 private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
 
   private var _scheduler: Option[SchedulerBackend] = None
 
-  def setIfUnset(schedulerBackend: SchedulerBackend): Unit = _scheduler match {
+  private val statusKeeper = RpcRelatedStatusKeeper
+
+  def registerScheduler(schedulerBackend: SchedulerBackend): Unit = _scheduler match {
     case None => _scheduler = Some(schedulerBackend)
     case _ =>
   }
@@ -39,17 +40,16 @@ private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
           executorData.executorEndpoint.send(message)
         }
       case Some(_) => throw new IllegalArgumentException("Not CoarseGrainedSchedulerBackend")
-      case None => throw new IllegalArgumentException("SchedulerBackend Unset")
+      case None => throw new IllegalArgumentException("SchedulerBackend Unregistered")
     }
   }
 
   private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
-    case DummyMessage(someContent) => logWarning("Dummy~")
+    case DummyMessage(someContent) => logWarning(s"Dummy message received on Driver: $someContent")
   }
 
   private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
-    // Currently not deal with this
-    case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
+    case _ => ;
   }
 
   override def handleOapMessage(message: OapMessage): Unit = message match {

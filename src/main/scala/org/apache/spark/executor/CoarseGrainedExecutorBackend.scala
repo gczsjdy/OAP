@@ -127,6 +127,15 @@ private[spark] class CoarseGrainedExecutorBackend(
     case message: OapMessage => OapRpcManagerSlave.handleOapMessage(message)
   }
 
+  // Before sending RPC message to Driver using OapRpcManagerSlave, please register the
+  // DriverEndpoint first
+  private def registerDriverEndpointToRpcManager = {
+    driver match {
+      case None => throw new IllegalArgumentException("DriverEndpoint Unset")
+      case Some(driverEndpoint) => OapRpcManagerSlave.registerDriverEndpoint(driverEndpoint)
+    }
+  }
+
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (stopping.get()) {
       logInfo(s"Driver from $remoteAddress disconnected during shutdown")

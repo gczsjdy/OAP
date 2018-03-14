@@ -18,15 +18,33 @@
 package org.apache.spark.rpc
 
 import org.apache.spark.rpc.OapMessages.DummyMessage
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.sql.SparkSession
 
 object TestOapRpc {
+
+  val spark = SparkSession.builder().master("spark://localhost:7077").getOrCreate()
+
+  def testSendMessageDriverToExecutor: Unit = {
+    OapRpcManagerMaster.registerScheduler(spark.sparkContext.schedulerBackend)
+    OapRpcManagerMaster.sendOapMessage(DummyMessage("He is a wanderer"))
+  }
+
+  def testSendMessageExecutorToDriver: Unit = {
+    OapRpcManagerSlave.registerDriverEndpoint(
+      spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
+        .driverEndpoint)
+    OapRpcManagerSlave.sendOapMessage(DummyMessage("I am a slave"))
+  }
+
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder().master("spark://localhost:7077").getOrCreate()
-    OapRpcManagerMaster.setIfUnset(spark.sparkContext.schedulerBackend)
     // Waiting for ExecutorRegister done
     Thread.sleep(10000)
-    OapRpcManagerMaster.sendOapMessage(DummyMessage("he is a wanderer"))
+
+    testSendMessageDriverToExecutor
+
+    testSendMessageExecutorToDriver
+
     Thread.sleep(3000)
   }
 }

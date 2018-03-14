@@ -18,16 +18,23 @@
 package org.apache.spark.rpc
 
 import org.apache.spark.rpc.OapMessages._
-import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 
 private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
 
+  private var _driverEndpoint: Option[RpcEndpointRef] = None
+
+  def registerDriverEndpoint(driverEndpoint: RpcEndpointRef): Unit = _driverEndpoint match {
+    case None => _driverEndpoint = Some(driverEndpoint)
+    case _ =>
+  }
+
   private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
-    case DummyMessage(someContent) => logWarning(s"Dummy message on Executor: $someContent")
+    case DummyMessage(someContent) => logWarning(
+      s"Dummy message received on Executor: $someContent")
   }
 
   private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
-    case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
+    case _ => ;
   }
 
   override def handleOapMessage(message: OapMessage): Unit = message match {
@@ -36,7 +43,11 @@ private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
   }
 
   private def sendDummyMessage(message: OapDummyMessage): Unit = message match {
-    case dummyMessage: DummyMessage => ;
+    case dummyMessage: DummyMessage => _driverEndpoint match {
+      case Some(driverEndponit) => driverEndponit.send(message)
+      case None => throw new IllegalArgumentException("DriverEndpoint Unregistered")
+
+    }
   }
 
   override def sendOapMessage(message: OapMessage): Unit = message match {
