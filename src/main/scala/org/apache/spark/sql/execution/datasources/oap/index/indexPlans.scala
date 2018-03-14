@@ -217,8 +217,10 @@ case class DropIndexCommand(
     qe.assertAnalyzed()
     val relation = qe.optimizedPlan
 
-    sparkSession.sparkContext.schedulerBackend match {
+    val scheduler = sparkSession.sparkContext.schedulerBackend
+    scheduler match {
       case scheduler: CoarseGrainedSchedulerBackend =>
+          OapRpcManagerMaster.setIfUnset(scheduler)
           OapRpcManagerMaster.sendOapMessage(CacheDrop(indexName))
       case _: LocalSchedulerBackend => FiberCacheManager.removeIndexCache(indexName)
     }

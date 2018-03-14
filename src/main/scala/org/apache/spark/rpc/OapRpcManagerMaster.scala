@@ -18,21 +18,28 @@
 package org.apache.spark.rpc
 
 import org.apache.spark.rpc.OapMessages._
+import org.apache.spark.scheduler.SchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 
 private[spark] object OapRpcManagerMaster extends OapRpcManagerBase {
 
+  private var _scheduler: Option[SchedulerBackend] = None
+
+  def setIfUnset(schedulerBackend: SchedulerBackend): Unit = _scheduler match {
+    case None => _scheduler = Some(schedulerBackend)
+    case _ =>
+  }
+
   private def sendMessageToExecutors(message: OapMessage): Unit = {
-    val scheduler = SparkSession.builder().getOrCreate().sparkContext.schedulerBackend
-    scheduler match {
-      case scheduler: CoarseGrainedSchedulerBackend =>
+    _scheduler match {
+      case Some(scheduler: CoarseGrainedSchedulerBackend) =>
         val executorDataMap = scheduler.executorDataMap
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(message)
         }
-      case _ => throw new IllegalArgumentException("Not CoarseGrainedSchedulerBackend")
+      case Some(_) => throw new IllegalArgumentException("Not CoarseGrainedSchedulerBackend")
+      case None => throw new IllegalArgumentException("SchedulerBackend Unset")
     }
   }
 
