@@ -22,19 +22,19 @@ import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.scheduler.SchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
-private[spark] object OapRpcManagerMaster extends OapRpcManagerBase with Logging {
+private[spark] object OapRpcManagerMaster extends Logging {
 
   private var _scheduler: Option[SchedulerBackend] = None
 
   private val statusKeeper = RpcRelatedStatusKeeper
 
-  def registerScheduler(schedulerBackend: SchedulerBackend): Unit = {
+  private[spark] def registerScheduler(schedulerBackend: SchedulerBackend): Unit = {
     if (_scheduler.isEmpty) {
       _scheduler = Some(schedulerBackend)
     }
   }
 
-  private def sendMessageToExecutors(message: OapMessage): Unit = {
+  private def sendMessageToExecutors(message: DriverToExecutorMessage): Unit = {
     _scheduler match {
       case Some(scheduler: CoarseGrainedSchedulerBackend) =>
         val executorDataMap = scheduler.executorDataMap
@@ -46,30 +46,27 @@ private[spark] object OapRpcManagerMaster extends OapRpcManagerBase with Logging
     }
   }
 
-  private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
-    case DummyMessage(someContent) =>
+  private def handleDummyMessage(message: DummyMessage): Unit = message match {
+    case MyDummyMessage(someContent) =>
       logWarning(s"Dummy message received on Driver: $someContent")
-    case DummyMessageWithId(executorId, someContent) =>
+    case MyDummyMessageWithId(executorId, someContent) =>
       logWarning(s"Dummy message from $executorId received on Driver: $someContent")
       statusKeeper.dummyStatusMap += executorId -> someContent
   }
 
-  private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
-    case _ => ;
+  private[spark] def handle(message: ExecutorToDriverMessage): Unit = message match {
+    case dummyMessage: DummyMessage => handleDummyMessage(dummyMessage)
+    case _ =>
   }
 
-  override def handleOapMessage(message: OapMessage): Unit = message match {
-    case dummyMessage: OapDummyMessage => handleDummyMessage(dummyMessage)
-    case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
+  private def sendDummyMessage(message: DummyMessage): Unit = message match {
+    case dummyMessage: MyDummyMessage => sendMessageToExecutors(dummyMessage)
   }
 
-  private def sendDummyMessage(message: OapDummyMessage): Unit = message match {
-    case dummyMessage: DummyMessage => sendMessageToExecutors(dummyMessage)
-  }
-
-  override def sendOapMessage(message: OapMessage): Unit = message match {
-    case dummyMessage: OapDummyMessage => sendDummyMessage(dummyMessage)
-    case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
+  private[spark] def send(message: DriverToExecutorMessage): Unit =
+    message match {
+    case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
+    case _ =>
   }
 
   // Just for test/debug

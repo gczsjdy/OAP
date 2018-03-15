@@ -147,7 +147,7 @@ private[spark] class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl,
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
         }
 
-      case message: OapMessage => OapRpcManagerMaster.handleOapMessage(message)
+      case message: ExecutorToDriverMessage => OapRpcManagerMaster.handle(message)
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

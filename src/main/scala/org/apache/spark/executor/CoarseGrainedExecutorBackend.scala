@@ -125,7 +125,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
       }.start()
 
-    case message: OapMessage => OapRpcManagerSlave.handleOapMessage(message)
+    case message: DriverToExecutorMessage => OapRpcManagerSlave.handle(message)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

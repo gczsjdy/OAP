@@ -17,9 +17,10 @@
 
 package org.apache.spark.rpc
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 
-private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
+private[spark] object OapRpcManagerSlave extends Logging {
 
   private var _driverEndpoint: Option[RpcEndpointRef] = None
 
@@ -29,29 +30,25 @@ private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
     }
   }
 
-  private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
-    case DummyMessage(someContent) => logWarning(
+  private def handleDummyMessage(message: DummyMessage): Unit = message match {
+    case MyDummyMessage(someContent) => logWarning(
       s"Dummy message received on Executor: $someContent")
   }
 
-  private def handleCacheMessage(message: OapCacheMessage): Unit = message match {
-    case _ => ;
+  private[spark] def handle(message: DriverToExecutorMessage): Unit = message match {
+    case dummyMessage: DummyMessage => handleDummyMessage(dummyMessage)
+    case _ =>
   }
 
-  override def handleOapMessage(message: OapMessage): Unit = message match {
-    case dummyMessage: OapDummyMessage => handleDummyMessage(dummyMessage)
-    case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
-  }
-
-  private def sendDummyMessage(message: OapDummyMessage): Unit = {
+  private def sendDummyMessage(message: DummyMessage): Unit = {
     _driverEndpoint match {
       case Some(driverEndponit) => driverEndponit.send(message)
       case None => throw new IllegalArgumentException("DriverEndpoint Unregistered")
     }
   }
 
-  override def sendOapMessage(message: OapMessage): Unit = message match {
-    case dummyMessage: OapDummyMessage => sendDummyMessage(dummyMessage)
-    case cacheMessage: OapCacheMessage => ;
+  private[spark] def send(message: ExecutorToDriverMessage): Unit = message match {
+    case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
+    case _ =>
   }
 }

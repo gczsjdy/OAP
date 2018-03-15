@@ -19,14 +19,16 @@ package org.apache.spark.rpc
 
 private[spark] sealed trait OapMessage extends Serializable
 
-private[spark] sealed trait OapDummyMessage extends OapMessage
+private[spark] sealed trait DriverToExecutorMessage extends OapMessage
+private[spark] sealed trait ExecutorToDriverMessage extends OapMessage
 
-private[spark] sealed trait OapCacheMessage extends OapMessage
-private[spark] sealed trait OapIndexMessage extends OapMessage
-private[spark] sealed trait OapMetricsMessage extends OapMessage
+private[spark] sealed trait DummyMessage extends DriverToExecutorMessage
+  with ExecutorToDriverMessage
+private[spark] sealed trait CacheMessageToExecutor extends DriverToExecutorMessage
+private[spark] sealed trait CacheMessageToDriver extends ExecutorToDriverMessage
 
 private[spark] object OapMessages {
-  case class DummyMessage(someContent: String) extends OapDummyMessage
-  case class DummyMessageWithId(executorId: String, someContent: String) extends OapDummyMessage
-  case class CacheDrop(indexName: String) extends OapCacheMessage
+  case class MyDummyMessage(someContent: String) extends DummyMessage
+  case class MyDummyMessageWithId(executorId: String, someContent: String) extends DummyMessage
+  case class CacheDrop(indexName: String) extends CacheMessageToExecutor
 }

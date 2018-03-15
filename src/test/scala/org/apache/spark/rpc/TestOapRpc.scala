@@ -17,7 +17,7 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.rpc.OapMessages.{DummyMessage, DummyMessageWithId}
+import org.apache.spark.rpc.OapMessages.{MyDummyMessage, MyDummyMessageWithId}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.sql.SparkSession
 
@@ -26,7 +26,7 @@ object TestOapRpc {
   val spark = SparkSession.builder().master("spark://localhost:7077").getOrCreate()
 
   def testSendMessageDriverToExecutor: Unit = {
-    OapRpcManagerMaster.sendOapMessage(DummyMessage("He is a wanderer"))
+    OapRpcManagerMaster.send(MyDummyMessage("He is a wanderer"))
   }
 
   def testSendMessageExecutorToDriver: Unit = {
@@ -35,14 +35,14 @@ object TestOapRpc {
     OapRpcManagerSlave.registerDriverEndpoint(
       spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
         .driverEndpoint)
-    OapRpcManagerSlave.sendOapMessage(DummyMessage("I am a slave"))
+    OapRpcManagerSlave.send(MyDummyMessage("I am a slave"))
   }
 
   def testSendMessageExecutorToDriverWithStatusKept: Unit = {
     OapRpcManagerSlave.registerDriverEndpoint(
       spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
         .driverEndpoint)
-    OapRpcManagerSlave.sendOapMessage(DummyMessageWithId("666", "I am a slave"))
+    OapRpcManagerSlave.send(MyDummyMessageWithId("666", "I am a slave"))
   }
 
   def testPrintStatusKeeperMap: Unit = {

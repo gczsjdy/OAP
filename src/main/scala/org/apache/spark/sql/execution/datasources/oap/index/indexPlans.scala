@@ -220,7 +220,7 @@ case class DropIndexCommand(
     val scheduler = sparkSession.sparkContext.schedulerBackend
     scheduler match {
       case scheduler: CoarseGrainedSchedulerBackend =>
-          OapRpcManagerMaster.sendOapMessage(CacheDrop(indexName))
+          OapRpcManagerMaster.send(CacheDrop(indexName))
       case _: LocalSchedulerBackend => FiberCacheManager.removeIndexCache(indexName)
     }
 
