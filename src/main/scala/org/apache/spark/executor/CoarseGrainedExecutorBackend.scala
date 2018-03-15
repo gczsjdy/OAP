@@ -59,6 +59,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
       // This is a very fast action so we can use "ThreadUtils.sameThread"
       driver = Some(ref)
+      OapRpcManagerSlave.registerDriverEndpoint(ref)
       ref.ask[Boolean](RegisterExecutor(executorId, self, hostname, cores, extractLogUrls))
     }(ThreadUtils.sameThread).onComplete {
       // This is a very fast action so we can use "ThreadUtils.sameThread"
@@ -125,15 +126,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       }.start()
 
     case message: OapMessage => OapRpcManagerSlave.handleOapMessage(message)
-  }
-
-  // Before sending RPC message to Driver using OapRpcManagerSlave, please register the
-  // DriverEndpoint first
-  private def registerDriverEndpointToRpcManager = {
-    driver match {
-      case None => throw new IllegalArgumentException("DriverEndpoint Unset")
-      case Some(driverEndpoint) => OapRpcManagerSlave.registerDriverEndpoint(driverEndpoint)
-    }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

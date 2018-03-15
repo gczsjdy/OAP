@@ -28,9 +28,10 @@ private[spark] object OapRpcManagerMaster extends OapRpcManagerBase with Logging
 
   private val statusKeeper = RpcRelatedStatusKeeper
 
-  def registerScheduler(schedulerBackend: SchedulerBackend): Unit = _scheduler match {
-    case None => _scheduler = Some(schedulerBackend)
-    case _ =>
+  def registerScheduler(schedulerBackend: SchedulerBackend): Unit = {
+    if (_scheduler.isEmpty) {
+      _scheduler = Some(schedulerBackend)
+    }
   }
 
   private def sendMessageToExecutors(message: OapMessage): Unit = {

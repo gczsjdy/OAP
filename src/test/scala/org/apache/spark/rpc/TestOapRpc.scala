@@ -26,11 +26,12 @@ object TestOapRpc {
   val spark = SparkSession.builder().master("spark://localhost:7077").getOrCreate()
 
   def testSendMessageDriverToExecutor: Unit = {
-    OapRpcManagerMaster.registerScheduler(spark.sparkContext.schedulerBackend)
     OapRpcManagerMaster.sendOapMessage(DummyMessage("He is a wanderer"))
   }
 
   def testSendMessageExecutorToDriver: Unit = {
+    // Because we cannot get a CoarseGrainedExecutorBackend on Driver, so this OapRpcManagerSlave
+    // is actually on Driver
     OapRpcManagerSlave.registerDriverEndpoint(
       spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
         .driverEndpoint)

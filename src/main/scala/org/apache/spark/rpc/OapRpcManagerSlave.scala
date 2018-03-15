@@ -23,9 +23,10 @@ private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
 
   private var _driverEndpoint: Option[RpcEndpointRef] = None
 
-  def registerDriverEndpoint(driverEndpoint: RpcEndpointRef): Unit = _driverEndpoint match {
-    case None => _driverEndpoint = Some(driverEndpoint)
-    case _ =>
+  private[spark] def registerDriverEndpoint(driverEndpoint: RpcEndpointRef): Unit = {
+    if (_driverEndpoint.isEmpty) {
+      _driverEndpoint = Some(driverEndpoint)
+    }
   }
 
   private def handleDummyMessage(message: OapDummyMessage): Unit = message match {
@@ -42,13 +43,15 @@ private[spark] object OapRpcManagerSlave extends OapRpcManagerBase {
     case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
   }
 
-  private def sendDummyMessage(message: OapDummyMessage): Unit = _driverEndpoint match {
-    case Some(driverEndponit) => driverEndponit.send(message)
-    case None => throw new IllegalArgumentException("DriverEndpoint Unregistered")
+  private def sendDummyMessage(message: OapDummyMessage): Unit = {
+    _driverEndpoint match {
+      case Some(driverEndponit) => driverEndponit.send(message)
+      case None => throw new IllegalArgumentException("DriverEndpoint Unregistered")
+    }
   }
 
   override def sendOapMessage(message: OapMessage): Unit = message match {
     case dummyMessage: OapDummyMessage => sendDummyMessage(dummyMessage)
-    case cacheMessage: OapCacheMessage => handleCacheMessage(cacheMessage)
+    case cacheMessage: OapCacheMessage => ;
   }
 }

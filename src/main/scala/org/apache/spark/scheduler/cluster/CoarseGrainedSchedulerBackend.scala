@@ -44,6 +44,7 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
 private[spark] class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend with Logging
 {
+  outer =>
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   protected val totalCoreCount = new AtomicInteger(0)
   // Total number of executors that are currently registered
@@ -116,6 +117,7 @@ private[spark] class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl,
           Option(self).foreach(_.send(ReviveOffers))
         }
       }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
+      OapRpcManagerMaster.registerScheduler(outer)
     }
 
     override def receive: PartialFunction[Any, Unit] = {
