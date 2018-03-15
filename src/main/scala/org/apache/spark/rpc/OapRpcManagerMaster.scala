@@ -19,16 +19,15 @@ package org.apache.spark.rpc
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
-import org.apache.spark.scheduler.SchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
 private[spark] object OapRpcManagerMaster extends Logging {
 
-  private var _scheduler: Option[SchedulerBackend] = None
+  private var _scheduler: Option[CoarseGrainedSchedulerBackend] = None
 
   private val statusKeeper = RpcRelatedStatusKeeper
 
-  private[spark] def registerScheduler(schedulerBackend: SchedulerBackend): Unit = {
+  private[spark] def registerScheduler(schedulerBackend: CoarseGrainedSchedulerBackend): Unit = {
     if (_scheduler.isEmpty) {
       _scheduler = Some(schedulerBackend)
     }
@@ -36,12 +35,11 @@ private[spark] object OapRpcManagerMaster extends Logging {
 
   private def sendMessageToExecutors(message: DriverToExecutorMessage): Unit = {
     _scheduler match {
-      case Some(scheduler: CoarseGrainedSchedulerBackend) =>
+      case Some(scheduler) =>
         val executorDataMap = scheduler.executorDataMap
         for ((_, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(message)
         }
-      case Some(_) => throw new IllegalArgumentException("Not CoarseGrainedSchedulerBackend")
       case None => throw new IllegalArgumentException("SchedulerBackend Unregistered")
     }
   }
