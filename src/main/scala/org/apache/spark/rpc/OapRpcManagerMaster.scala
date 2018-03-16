@@ -25,7 +25,7 @@ private[spark] object OapRpcManagerMaster extends Logging {
 
   private var _scheduler: Option[CoarseGrainedSchedulerBackend] = None
 
-  private val statusKeeper = RpcRelatedStatusKeeper
+  private[rpc] val statusKeeper = RpcRelatedStatusKeeper
 
   private[spark] def registerScheduler(schedulerBackend: CoarseGrainedSchedulerBackend): Unit = {
     if (_scheduler.isEmpty) {
@@ -45,11 +45,9 @@ private[spark] object OapRpcManagerMaster extends Logging {
   }
 
   private def handleDummyMessage(message: DummyMessage): Unit = message match {
-    case MyDummyMessage(someContent) =>
-      logWarning(s"Dummy message received on Driver: $someContent")
-    case MyDummyMessageWithId(executorId, someContent) =>
-      logWarning(s"Dummy message from $executorId received on Driver: $someContent")
-      statusKeeper.dummyStatusMap += executorId -> someContent
+    case dummyMessage @ MyDummyMessage(id, someContent) =>
+      logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
+      statusKeeper.dummyStatusAdd(id, someContent)
   }
 
   private[spark] def handle(message: ExecutorToDriverMessage): Unit = message match {
@@ -65,10 +63,5 @@ private[spark] object OapRpcManagerMaster extends Logging {
     message match {
     case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
     case _ =>
-  }
-
-  // Just for test/debug
-  def printKeptStatus: Unit = {
-    statusKeeper.dummyStatusMap.foreach{x => logWarning(x.toString)}
   }
 }

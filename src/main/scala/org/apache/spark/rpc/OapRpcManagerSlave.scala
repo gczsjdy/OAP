@@ -31,8 +31,10 @@ private[spark] object OapRpcManagerSlave extends Logging {
   }
 
   private def handleDummyMessage(message: DummyMessage): Unit = message match {
-    case MyDummyMessage(someContent) => logWarning(
-      s"Dummy message received on Executor: $someContent")
+    case dummyMessage @ MyDummyMessage(id, someContent) =>
+      logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
+      // Following line is to test sending the same message from executor to Driver
+      send(dummyMessage)
   }
 
   private[spark] def handle(message: DriverToExecutorMessage): Unit = message match {

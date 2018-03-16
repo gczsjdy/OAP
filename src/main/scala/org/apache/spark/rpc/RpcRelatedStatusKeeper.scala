@@ -21,6 +21,16 @@ import scala.collection.mutable
 
 object RpcRelatedStatusKeeper {
 
-  private[rpc] val dummyStatusMap = mutable.Map[String, String]()
+  private val dummyStatusMap = mutable.Map[String, String]()
+  // Currently not used
+  private val cacheStatusMap = mutable.Map[String, String]()
+
+  def dummyStatusAdd(x: (String, String)): Unit = {
+    dummyStatusMap += x
+  }
+
+  def getDummyStatus(): mutable.Map[String, String] = {
+    dummyStatusMap
+  }
 
 }

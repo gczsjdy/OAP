@@ -28,7 +28,6 @@ private[spark] sealed trait CacheMessageToExecutor extends DriverToExecutorMessa
 private[spark] sealed trait CacheMessageToDriver extends ExecutorToDriverMessage
 
 private[spark] object OapMessages {
-  case class MyDummyMessage(someContent: String) extends DummyMessage
-  case class MyDummyMessageWithId(executorId: String, someContent: String) extends DummyMessage
+  case class MyDummyMessage(id: String, someContent: String) extends DummyMessage
   case class CacheDrop(indexName: String) extends CacheMessageToExecutor
 }

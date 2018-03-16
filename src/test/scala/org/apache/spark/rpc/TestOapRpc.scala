@@ -17,50 +17,38 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.rpc.OapMessages.{MyDummyMessage, MyDummyMessageWithId}
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.OapMessages.MyDummyMessage
 import org.apache.spark.sql.SparkSession
 
-object TestOapRpc {
+object TestOapRpc extends Logging {
 
   val spark = SparkSession.builder().master("spark://localhost:7077").getOrCreate()
 
-  def testSendMessageDriverToExecutor: Unit = {
-    OapRpcManagerMaster.send(MyDummyMessage("He is a wanderer"))
+  val idAndContent = ("0", "He is a wanderer")
+
+  // Send message from Driver to Executor, and then send back the same message
+  def testSendMessage: Unit = {
+    OapRpcManagerMaster.send(MyDummyMessage.tupled(idAndContent))
   }
 
-  def testSendMessageExecutorToDriver: Unit = {
-    // Because we cannot get a CoarseGrainedExecutorBackend on Driver, so this OapRpcManagerSlave
-    // is actually on Driver
-    OapRpcManagerSlave.registerDriverEndpoint(
-      spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-        .driverEndpoint)
-    OapRpcManagerSlave.send(MyDummyMessage("I am a slave"))
-  }
-
-  def testSendMessageExecutorToDriverWithStatusKept: Unit = {
-    OapRpcManagerSlave.registerDriverEndpoint(
-      spark.sparkContext.schedulerBackend.asInstanceOf[CoarseGrainedSchedulerBackend]
-        .driverEndpoint)
-    OapRpcManagerSlave.send(MyDummyMessageWithId("666", "I am a slave"))
-  }
-
-  def testPrintStatusKeeperMap: Unit = {
-    OapRpcManagerMaster.printKeptStatus
+  // Keep the sent back message in StatusKeeper, check the equation
+  def testStatusKeeper: Unit = {
+    val ans = OapRpcManagerMaster.statusKeeper.getDummyStatus()
+    assert(ans.size == 1)
+    ans.foreach { item =>
+      assert(idAndContent == item)
+    }
+    logWarning("Message check passed!")
   }
 
   def main(args: Array[String]): Unit = {
     // Waiting for ExecutorRegister done
     Thread.sleep(10000)
-
-    testSendMessageDriverToExecutor
-
-    testSendMessageExecutorToDriver
-
-    testSendMessageExecutorToDriverWithStatusKept
+    testSendMessage
 
     Thread.sleep(3000)
-    testPrintStatusKeeperMap
+    testStatusKeeper
 
     Thread.sleep(3000)
   }
