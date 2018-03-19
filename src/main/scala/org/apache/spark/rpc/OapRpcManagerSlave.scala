@@ -25,9 +25,7 @@ private[spark] object OapRpcManagerSlave extends Logging {
   private var _driverEndpoint: Option[RpcEndpointRef] = None
 
   private[spark] def registerDriverEndpoint(driverEndpoint: RpcEndpointRef): Unit = {
-    if (_driverEndpoint.isEmpty) {
-      _driverEndpoint = Some(driverEndpoint)
-    }
+    _driverEndpoint = Some(driverEndpoint)
   }
 
   private def handleDummyMessage(message: DummyMessage): Unit = message match {

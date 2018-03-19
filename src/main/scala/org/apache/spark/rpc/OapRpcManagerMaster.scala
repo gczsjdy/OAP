@@ -25,12 +25,10 @@ private[spark] object OapRpcManagerMaster extends Logging {
 
   private var _scheduler: Option[CoarseGrainedSchedulerBackend] = None
 
-  private[rpc] val statusKeeper = RpcRelatedStatusKeeper
+  private[rpc] val statusKeeper = new RpcRelatedStatusKeeper
 
   private[spark] def registerScheduler(schedulerBackend: CoarseGrainedSchedulerBackend): Unit = {
-    if (_scheduler.isEmpty) {
-      _scheduler = Some(schedulerBackend)
-    }
+    _scheduler = Some(schedulerBackend)
   }
 
   private def sendMessageToExecutors(message: DriverToExecutorMessage): Unit = {
@@ -59,9 +57,10 @@ private[spark] object OapRpcManagerMaster extends Logging {
     case dummyMessage: MyDummyMessage => sendMessageToExecutors(dummyMessage)
   }
 
-  private[spark] def send(message: DriverToExecutorMessage): Unit =
+  private[spark] def send(message: DriverToExecutorMessage): Unit = {
     message match {
-    case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
-    case _ =>
+      case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
+      case _ =>
+    }
   }
 }

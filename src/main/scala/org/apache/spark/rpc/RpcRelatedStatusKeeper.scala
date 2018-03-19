@@ -19,7 +19,7 @@ package org.apache.spark.rpc
 
 import scala.collection.mutable
 
-object RpcRelatedStatusKeeper {
+class RpcRelatedStatusKeeper {
 
   private val dummyStatusMap = mutable.Map[String, String]()
   // Currently not used
