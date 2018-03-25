@@ -17,65 +17,30 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
-private[spark] class OapRpcManagerMaster(val rpcEnv: RpcEnv) extends
-  OapRpcManager[DriverToExecutorMessage, ExecutorToDriverMessage] {
-
-  private var _scheduler: Option[CoarseGrainedSchedulerBackend] = None
+private[spark] class OapRpcManagerMaster(oapRpcManagerMasterEndpoint: OapRpcManagerMasterEndpoint)
+    extends OapRpcManager {
 
   private[rpc] val statusKeeper = new RpcRelatedStatusKeeper
 
-
-  // Initialize
-  {
-
-  }
-
-  private[spark] def registerScheduler(schedulerBackend: CoarseGrainedSchedulerBackend): Unit = {
-    _scheduler = Some(schedulerBackend)
-  }
-
-  private def sendMessageToExecutors(message: DriverToExecutorMessage): Unit = {
-    _scheduler match {
-      case Some(scheduler) =>
-        val executorDataMap = scheduler.executorDataMap
-        for ((_, executorData) <- executorDataMap) {
-          executorData.executorEndpoint.send(message)
-        }
-      case None => throw new IllegalArgumentException("SchedulerBackend Unregistered")
+  private def sendOneWayMessageToExecutors(message: OapMessage): Unit = {
+    oapRpcManagerMasterEndpoint.rpcEndpointRefByExecutor.foreach {
+      case (_, slaveEndpoint) => slaveEndpoint.send(message)
     }
   }
 
-  private def handleDummyMessage(message: DummyMessage): Unit = message match {
-    case dummyMessage @ MyDummyMessage(id, someContent) =>
+  override private[spark] def handle(message: OapMessage): Unit = message match {
+    case MyDummyMessage(id, someContent) =>
       logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
       statusKeeper.dummyStatusAdd(id, someContent)
-  }
-
-  override private[spark] def handle[ExecutorToDriverMessage](message: ExecutorToDriverMessage):
-    Unit = message match {
-    case dummyMessage: DummyMessage => handleDummyMessage(dummyMessage)
     case _ =>
   }
 
-  private def sendDummyMessage(message: DummyMessage): Unit = message match {
-    case dummyMessage: MyDummyMessage => sendMessageToExecutors(dummyMessage)
-  }
-
-  override private[spark] def send[DriverToExecutorMessage](message: DriverToExecutorMessage): Unit
-    = message match {
-    case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
-    case _ =>
-  }
+  override private[spark] def send(message: OapMessage): Unit =
+    sendOneWayMessageToExecutors(message)
 }
 
-class OapDriverEndpoint(val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint with Logging {
-  override def onStart(): Unit = {
-
-  }
-
-  override def receive: PartialFunction[Any, Unit] = super.receive
+private[spark] object OapRpcManagerMaster {
+  val DRIVER_ENDPOINT_NAME = "OapRpcManagerMaster"
 }

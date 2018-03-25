@@ -17,18 +17,15 @@
 
 package org.apache.spark.rpc
 
-private[spark] sealed trait OapMessage extends Serializable
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.OapMessages.CacheDrop
+import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 
-private[spark] sealed trait DriverToExecutorMessage extends OapMessage
-private[spark] sealed trait ExecutorToDriverMessage extends OapMessage
+private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
+  extends ThreadSafeRpcEndpoint with Logging {
 
-private[spark] sealed trait DummyMessage extends DriverToExecutorMessage
-  with ExecutorToDriverMessage
-private[spark] sealed trait CacheMessageToExecutor extends DriverToExecutorMessage
-private[spark] sealed trait CacheMessageToDriver extends ExecutorToDriverMessage
-
-private[spark] object OapMessages {
-  case class MyDummyMessage(id: String, someContent: String) extends DummyMessage
-  case class CacheDrop(indexName: String) extends CacheMessageToExecutor
-
+  override def receive: PartialFunction[Any, Unit] = {
+    case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
+    case _ =>
+  }
 }

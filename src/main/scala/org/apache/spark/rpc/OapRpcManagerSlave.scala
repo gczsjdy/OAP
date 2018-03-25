@@ -19,38 +19,25 @@ package org.apache.spark.rpc
 
 import org.apache.spark.rpc.OapMessages._
 
-private[spark] class OapRpcManagerSlave extends
-  OapRpcManager[ExecutorToDriverMessage, DriverToExecutorMessage] {
+private[spark] class OapRpcManagerSlave(
+  rpcEnv: RpcEnv, driverEndpoint: RpcEndpointRef, executorId: String) extends OapRpcManager {
 
-  private var _driverEndpoint: Option[RpcEndpointRef] = None
+  private val slaveEndpoint = rpcEnv.setupEndpoint(
+    s"OapRpcManagerSlave_$executorId", new OapRpcManagerSlaveEndpoint(rpcEnv))
 
-  private[spark] def registerDriverEndpoint(driverEndpoint: RpcEndpointRef): Unit = {
-    _driverEndpoint = Some(driverEndpoint)
+  initialize()
+
+  private def initialize() = {
+    driverEndpoint.askWithRetry[Boolean](RegisterOapRpcManager(executorId, slaveEndpoint))
   }
 
-  private def handleDummyMessage(message: DummyMessage): Unit = message match {
-    case dummyMessage @ MyDummyMessage(id, someContent) =>
+  override private[spark] def handle(message: OapMessage): Unit = message match {
+    case MyDummyMessage(id, someContent) =>
       logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
       // Following line is to test sending the same message from executor to Driver
-      send(dummyMessage)
-  }
-
-  override private[spark] def handle[DriverToExecutorMessage](message: DriverToExecutorMessage):
-    Unit = message match {
-    case dummyMessage: DummyMessage => handleDummyMessage(dummyMessage)
+      send(message)
     case _ =>
   }
 
-  private def sendDummyMessage(message: DummyMessage): Unit = {
-    _driverEndpoint match {
-      case Some(driverEndponit) => driverEndponit.send(message)
-      case None => throw new IllegalArgumentException("DriverEndpoint Unregistered")
-    }
-  }
-
-  override private[spark] def send[ExecutorToDriverMessage](message: ExecutorToDriverMessage): Unit
-    = message match {
-    case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
-    case _ =>
-  }
+  override private[spark] def send(message: OapMessage): Unit = slaveEndpoint.send(message)
 }

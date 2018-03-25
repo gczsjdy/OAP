@@ -68,7 +68,7 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
-    val oapRpcManager: OapRpcManager[OapMessage, OapMessage],
+    val oapRpcManager: OapRpcManager,
     val conf: SparkConf) extends Logging {
 
   private[spark] var isStopped = false
@@ -374,10 +374,14 @@ object SparkEnv extends Logging {
       new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator))
     outputCommitCoordinator.coordinatorRef = Some(outputCommitCoordinatorRef)
 
+    val oapRpcManagerMasterEndpoint = new OapRpcManagerMasterEndpoint(rpcEnv)
+    val oapRpcDriverEndpoint = registerOrLookupEndpoint(
+      OapRpcManagerMaster.DRIVER_ENDPOINT_NAME, oapRpcManagerMasterEndpoint)
+
     val oapRpcManager = if (isDriver) {
-      new OapRpcManagerMaster(rpcEnv)
+      new OapRpcManagerMaster(oapRpcManagerMasterEndpoint)
     } else {
-      new OapRpcManagerSlave()
+      new OapRpcManagerSlave(rpcEnv, oapRpcDriverEndpoint, executorId)
     }
 
     val envInstance = new SparkEnv(

@@ -17,13 +17,21 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.OapMessages.OapMessage
+private[spark] object OapMessages {
 
-trait OapRpcManager extends Logging{
+  sealed trait OapMessage extends Serializable
 
-  private[spark] def send(message: OapMessage): Unit
+  sealed trait ToOapRpcManagerSlave extends OapMessage
+  sealed trait ToOapRpcManagerMaster extends OapMessage
 
-  private[spark] def handle(message: OapMessage): Unit
+  case class MyDummyMessage(id: String, someContent: String) extends
+    ToOapRpcManagerSlave with ToOapRpcManagerMaster
+
+  /* Master to slave messages */
+  case class CacheDrop(indexName: String) extends ToOapRpcManagerSlave
+
+  /* Slave to master messages */
+  case class RegisterOapRpcManager(
+      executorId: String, oapRpcManagerEndpoint: RpcEndpointRef) extends ToOapRpcManagerMaster
 
 }
