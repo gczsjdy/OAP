@@ -21,11 +21,18 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
-private[spark] object OapRpcManagerMaster extends Logging {
+private[spark] class OapRpcManagerMaster(val rpcEnv: RpcEnv) extends
+  OapRpcManager[DriverToExecutorMessage, ExecutorToDriverMessage] {
 
   private var _scheduler: Option[CoarseGrainedSchedulerBackend] = None
 
   private[rpc] val statusKeeper = new RpcRelatedStatusKeeper
+
+
+  // Initialize
+  {
+
+  }
 
   private[spark] def registerScheduler(schedulerBackend: CoarseGrainedSchedulerBackend): Unit = {
     _scheduler = Some(schedulerBackend)
@@ -48,7 +55,8 @@ private[spark] object OapRpcManagerMaster extends Logging {
       statusKeeper.dummyStatusAdd(id, someContent)
   }
 
-  private[spark] def handle(message: ExecutorToDriverMessage): Unit = message match {
+  override private[spark] def handle[ExecutorToDriverMessage](message: ExecutorToDriverMessage):
+    Unit = message match {
     case dummyMessage: DummyMessage => handleDummyMessage(dummyMessage)
     case _ =>
   }
@@ -57,10 +65,17 @@ private[spark] object OapRpcManagerMaster extends Logging {
     case dummyMessage: MyDummyMessage => sendMessageToExecutors(dummyMessage)
   }
 
-  private[spark] def send(message: DriverToExecutorMessage): Unit = {
-    message match {
-      case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
-      case _ =>
-    }
+  override private[spark] def send[DriverToExecutorMessage](message: DriverToExecutorMessage): Unit
+    = message match {
+    case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
+    case _ =>
   }
+}
+
+class OapDriverEndpoint(val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint with Logging {
+  override def onStart(): Unit = {
+
+  }
+
+  override def receive: PartialFunction[Any, Unit] = super.receive
 }

@@ -17,18 +17,12 @@
 
 package org.apache.spark.rpc
 
-private[spark] sealed trait OapMessage extends Serializable
+import org.apache.spark.internal.Logging
 
-private[spark] sealed trait DriverToExecutorMessage extends OapMessage
-private[spark] sealed trait ExecutorToDriverMessage extends OapMessage
+trait OapRpcManager[+SendType <: OapMessage, +HandleType <: OapMessage] extends Logging{
 
-private[spark] sealed trait DummyMessage extends DriverToExecutorMessage
-  with ExecutorToDriverMessage
-private[spark] sealed trait CacheMessageToExecutor extends DriverToExecutorMessage
-private[spark] sealed trait CacheMessageToDriver extends ExecutorToDriverMessage
+  def send[S >: SendType](message: S): Unit
 
-private[spark] object OapMessages {
-  case class MyDummyMessage(id: String, someContent: String) extends DummyMessage
-  case class CacheDrop(indexName: String) extends CacheMessageToExecutor
+  def handle[H >: HandleType](message: H): Unit
 
 }

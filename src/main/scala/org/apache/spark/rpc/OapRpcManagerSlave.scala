@@ -17,10 +17,10 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 
-private[spark] object OapRpcManagerSlave extends Logging {
+private[spark] class OapRpcManagerSlave extends
+  OapRpcManager[ExecutorToDriverMessage, DriverToExecutorMessage] {
 
   private var _driverEndpoint: Option[RpcEndpointRef] = None
 
@@ -35,7 +35,8 @@ private[spark] object OapRpcManagerSlave extends Logging {
       send(dummyMessage)
   }
 
-  private[spark] def handle(message: DriverToExecutorMessage): Unit = message match {
+  override private[spark] def handle[DriverToExecutorMessage](message: DriverToExecutorMessage):
+    Unit = message match {
     case dummyMessage: DummyMessage => handleDummyMessage(dummyMessage)
     case _ =>
   }
@@ -47,7 +48,8 @@ private[spark] object OapRpcManagerSlave extends Logging {
     }
   }
 
-  private[spark] def send(message: ExecutorToDriverMessage): Unit = message match {
+  override private[spark] def send[ExecutorToDriverMessage](message: ExecutorToDriverMessage): Unit
+    = message match {
     case dummyMessage: DummyMessage => sendDummyMessage(dummyMessage)
     case _ =>
   }
