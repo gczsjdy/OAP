@@ -52,16 +52,17 @@ private[spark] class OapRpcManagerMasterEndpoint(
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RegisterOapRpcManager(executorId, slaveEndpoint) =>
-      context.reply(handleRegister(executorId, slaveEndpoint))
+      context.reply(handleRegistration(executorId, slaveEndpoint))
     case _ =>
   }
 
   override def receive: PartialFunction[Any, Unit] = {
     case message: MyDummyMessage => handleDummyMessage(message)
+    case message: HeartBeat => handleHeartBeat(message)
     case _ =>
   }
 
-  private def handleRegister(executorId: String, ref: RpcEndpointRef): Boolean = {
+  private def handleRegistration(executorId: String, ref: RpcEndpointRef): Boolean = {
     rpcEndpointRefByExecutor += ((executorId, ref))
     true
   }
@@ -69,5 +70,10 @@ private[spark] class OapRpcManagerMasterEndpoint(
   private def handleDummyMessage(dummyMessage: MyDummyMessage) = dummyMessage match {
     case MyDummyMessage(id, someContent) =>
       logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
+  }
+
+  private def handleHeartBeat(heartBeat: HeartBeat) = heartBeat match {
+    case CacheMetrics(some: Int) => logWarning(s"Cache metrics received $some")
+    case IndexMetrics(some: Int) => logWarning(s"Index metrics received $some")
   }
 }

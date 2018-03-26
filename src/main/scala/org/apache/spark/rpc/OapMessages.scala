@@ -23,6 +23,7 @@ private[spark] object OapMessages {
 
   sealed trait ToOapRpcManagerSlave extends OapMessage
   sealed trait ToOapRpcManagerMaster extends OapMessage
+  sealed trait HeartBeat extends ToOapRpcManagerMaster
 
   /* Two-way messages */
   case class MyDummyMessage(id: String, someContent: String) extends
@@ -34,5 +35,8 @@ private[spark] object OapMessages {
   /* Slave to master messages */
   case class RegisterOapRpcManager(
       executorId: String, oapRpcManagerEndpoint: RpcEndpointRef) extends ToOapRpcManagerMaster
+  // The parameters currently are just for occupation
+  case class CacheMetrics(some: Int) extends HeartBeat
+  case class IndexMetrics(some: Int) extends HeartBeat
 
 }

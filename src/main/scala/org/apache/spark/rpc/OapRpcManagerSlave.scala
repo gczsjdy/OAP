@@ -17,16 +17,24 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.SparkEnv
+import java.util.concurrent.TimeUnit
+
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
+import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * Similar OapRpcManager class with [[OapRpcManagerMaster]], however running on Executor
  */
 private[spark] class OapRpcManagerSlave(
-  rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String) extends OapRpcManager {
+  rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String, conf: SparkConf)
+    extends OapRpcManager {
+
+  // Send OapHeartbeatMessage to Driver timed
+  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     s"OapRpcManagerSlave_$executorId", new OapRpcManagerSlaveEndpoint(rpcEnv))
@@ -38,6 +46,25 @@ private[spark] class OapRpcManagerSlave(
   }
 
   override private[spark] def send(message: OapMessage): Unit = driverEndpoint.send(message)
+
+  private def reportHeartBeat(getMaterials: Seq[() => HeartBeat]): Unit = {
+    val materials = getMaterials.map(_.apply())
+    materials.foreach(send)
+  }
+
+  private[spark] def sendHearBeat(getMaterials: Seq[() => HeartBeat]): Unit = {
+    val MS = 1000
+    val intervalMs = MS * conf.getInt(
+          OapConf.OAP_HEARTBEAT_INTERVAL.key, OapConf.OAP_HEARTBEAT_INTERVAL.defaultValue.get)
+
+    // Wait a random interval so the heartbeats don't end up in sync
+    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
+
+    val heartbeatTask = new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat(getMaterials))
+    }
+    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+  }
 }
 
 private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
@@ -53,6 +80,22 @@ private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
       logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
       // Following line is to test sending the same message from executor to Driver
       SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].driverEndpoint.send(message)
+      // Following is to test Heartbeat message sending
+      var metricsSource1 = 0
+      var metricsSource2 = 10
+
+      def metrics1: () => HeartBeat = () => {
+        metricsSource1 += 1
+        CacheMetrics(metricsSource1)
+      }
+
+      def metrics2: () => HeartBeat = () => {
+        metricsSource2 -= 1
+        IndexMetrics(metricsSource2)
+      }
+      SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].sendHearBeat(
+        Seq(metrics1, metrics2))
+
     case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
     case _ =>
   }
