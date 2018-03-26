@@ -24,6 +24,7 @@ private[spark] object OapMessages {
   sealed trait ToOapRpcManagerSlave extends OapMessage
   sealed trait ToOapRpcManagerMaster extends OapMessage
 
+  /* Two-way messages */
   case class MyDummyMessage(id: String, someContent: String) extends
     ToOapRpcManagerSlave with ToOapRpcManagerMaster
 

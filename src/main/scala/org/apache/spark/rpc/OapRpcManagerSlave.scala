@@ -17,10 +17,16 @@
 
 package org.apache.spark.rpc
 
+import org.apache.spark.SparkEnv
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
+import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 
+/**
+ * Similar OapRpcManager class with [[OapRpcManagerMaster]], however running on Executor
+ */
 private[spark] class OapRpcManagerSlave(
-  rpcEnv: RpcEnv, driverEndpoint: RpcEndpointRef, executorId: String) extends OapRpcManager {
+  rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String) extends OapRpcManager {
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     s"OapRpcManagerSlave_$executorId", new OapRpcManagerSlaveEndpoint(rpcEnv))
@@ -31,13 +37,23 @@ private[spark] class OapRpcManagerSlave(
     driverEndpoint.askWithRetry[Boolean](RegisterOapRpcManager(executorId, slaveEndpoint))
   }
 
-  override private[spark] def handle(message: OapMessage): Unit = message match {
-    case MyDummyMessage(id, someContent) =>
-      logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
-      // Following line is to test sending the same message from executor to Driver
-      send(message)
+  override private[spark] def send(message: OapMessage): Unit = driverEndpoint.send(message)
+}
+
+private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
+  extends ThreadSafeRpcEndpoint with Logging {
+
+  override def receive: PartialFunction[Any, Unit] = {
+    case message: OapMessage => handleOapMessage(message)
     case _ =>
   }
 
-  override private[spark] def send(message: OapMessage): Unit = slaveEndpoint.send(message)
+  private def handleOapMessage(message: OapMessage): Unit = message match {
+    case MyDummyMessage(id, someContent) =>
+      logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
+      // Following line is to test sending the same message from executor to Driver
+      SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].driverEndpoint.send(message)
+    case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
+    case _ =>
+  }
 }

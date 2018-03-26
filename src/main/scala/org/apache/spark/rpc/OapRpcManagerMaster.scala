@@ -17,24 +17,23 @@
 
 package org.apache.spark.rpc
 
+import scala.collection.mutable
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 
+/**
+ * An OapRpcManager running on Driver to send messages to Executors, get this object from SparkEnv
+ * @param oapRpcManagerMasterEndpoint The OapRpcManagerMasterEndpoint it holds, dealing with
+ *                                    messages' receiving
+ */
 private[spark] class OapRpcManagerMaster(oapRpcManagerMasterEndpoint: OapRpcManagerMasterEndpoint)
-    extends OapRpcManager {
-
-  private[rpc] val statusKeeper = new RpcRelatedStatusKeeper
+    extends OapRpcManager with Logging {
 
   private def sendOneWayMessageToExecutors(message: OapMessage): Unit = {
     oapRpcManagerMasterEndpoint.rpcEndpointRefByExecutor.foreach {
       case (_, slaveEndpoint) => slaveEndpoint.send(message)
     }
-  }
-
-  override private[spark] def handle(message: OapMessage): Unit = message match {
-    case MyDummyMessage(id, someContent) =>
-      logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
-      statusKeeper.dummyStatusAdd(id, someContent)
-    case _ =>
   }
 
   override private[spark] def send(message: OapMessage): Unit =
@@ -43,4 +42,32 @@ private[spark] class OapRpcManagerMaster(oapRpcManagerMasterEndpoint: OapRpcMana
 
 private[spark] object OapRpcManagerMaster {
   val DRIVER_ENDPOINT_NAME = "OapRpcManagerMaster"
+}
+
+private[spark] class OapRpcManagerMasterEndpoint(
+    override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint with Logging {
+
+  // Mapping from executor ID to RpcEndpointRef.
+  private[rpc] val rpcEndpointRefByExecutor = new mutable.HashMap[String, RpcEndpointRef]
+
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case RegisterOapRpcManager(executorId, slaveEndpoint) =>
+      context.reply(handleRegister(executorId, slaveEndpoint))
+    case _ =>
+  }
+
+  override def receive: PartialFunction[Any, Unit] = {
+    case message: MyDummyMessage => handleDummyMessage(message)
+    case _ =>
+  }
+
+  private def handleRegister(executorId: String, ref: RpcEndpointRef): Boolean = {
+    rpcEndpointRefByExecutor += ((executorId, ref))
+    true
+  }
+
+  private def handleDummyMessage(dummyMessage: MyDummyMessage) = dummyMessage match {
+    case MyDummyMessage(id, someContent) =>
+      logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
+  }
 }

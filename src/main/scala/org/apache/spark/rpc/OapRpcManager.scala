@@ -20,10 +20,19 @@ package org.apache.spark.rpc
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages.OapMessage
 
-trait OapRpcManager extends Logging{
+/**
+ * A base trait of OapRpcManagerMaster/Slave, use this class running on Driver/Executors to send
+ * messages to Executors/Driver.
+ * Note that not all functions need to be implemented in OapRpcManagerMaster/Slave
+ */
+
+trait OapRpcManager extends Logging {
 
   private[spark] def send(message: OapMessage): Unit
 
-  private[spark] def handle(message: OapMessage): Unit
+  // Different types of sending corresponding to interfaces in RpcEndpointRef, currently not used
+  // def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T]
+
+  // def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T
 
 }
