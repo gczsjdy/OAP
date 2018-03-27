@@ -15,24 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc
+package org.apache.spark.sql.oap.rpc
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.OapMessages.OapMessage
+import org.apache.spark.rpc.RpcEndpointRef
 
-/**
- * A base trait of OapRpcManagerMaster/Slave, use this class running on Driver/Executors to send
- * messages to Executors/Driver.
- * Note that not all functions need to be implemented in OapRpcManagerMaster/Slave
- */
+private[spark] object OapMessages {
 
-trait OapRpcManager extends Logging {
+  sealed trait OapMessage extends Serializable
 
-  private[spark] def send(message: OapMessage): Unit
+  sealed trait ToOapRpcManagerSlave extends OapMessage
+  sealed trait ToOapRpcManagerMaster extends OapMessage
+  sealed trait HeartBeat extends ToOapRpcManagerMaster
 
-  // Different types of sending corresponding to interfaces in RpcEndpointRef, currently not used
-  // def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T]
+  /* Two-way messages */
+  case class MyDummyMessage(id: String, someContent: String) extends
+    ToOapRpcManagerSlave with ToOapRpcManagerMaster
 
-  // def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T
+  /* Master to slave messages */
+  case class CacheDrop(indexName: String) extends ToOapRpcManagerSlave
+
+  /* Slave to master messages */
+  case class RegisterOapRpcManager(
+      executorId: String, oapRpcManagerEndpoint: RpcEndpointRef) extends ToOapRpcManagerMaster
 
 }

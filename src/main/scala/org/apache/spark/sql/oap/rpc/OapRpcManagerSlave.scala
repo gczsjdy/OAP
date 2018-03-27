@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc
+package org.apache.spark.sql.oap.rpc
 
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.OapMessages._
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.sql.oap.rpc.OapMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**

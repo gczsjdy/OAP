@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rpc
+package org.apache.spark.sql.oap.rpc
 
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.OapMessages._
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.sql.oap.rpc.OapMessages.{HeartBeat, MyDummyMessage, OapMessage, RegisterOapRpcManager}
 
 /**
  * An OapRpcManager running on Driver to send messages to Executors, get this object from SparkEnv
