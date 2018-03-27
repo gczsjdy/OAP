@@ -19,7 +19,7 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.OapMessages._
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
@@ -78,24 +78,6 @@ private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
   private def handleOapMessage(message: OapMessage): Unit = message match {
     case MyDummyMessage(id, someContent) =>
       logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
-      // Following line is to test sending the same message from executor to Driver
-      SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].driverEndpoint.send(message)
-      // Following is to test Heartbeat message sending
-      var metricsSource1 = 0
-      var metricsSource2 = 10
-
-      def metrics1: () => HeartBeat = () => {
-        metricsSource1 += 1
-        CacheMetrics(metricsSource1)
-      }
-
-      def metrics2: () => HeartBeat = () => {
-        metricsSource2 -= 1
-        IndexMetrics(metricsSource2)
-      }
-      SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].sendHearBeat(
-        Seq(metrics1, metrics2))
-
     case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
     case _ =>
   }

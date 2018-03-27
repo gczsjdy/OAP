@@ -73,7 +73,7 @@ private[spark] class OapRpcManagerMasterEndpoint(
   }
 
   private def handleHeartBeat(heartBeat: HeartBeat) = heartBeat match {
-    case CacheMetrics(some: Int) => logWarning(s"Cache metrics received $some")
-    case IndexMetrics(some: Int) => logWarning(s"Index metrics received $some")
+    // Handling different subclass of HeartBeat here
+    case _ =>
   }
 }

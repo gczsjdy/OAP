@@ -35,8 +35,5 @@ private[spark] object OapMessages {
   /* Slave to master messages */
   case class RegisterOapRpcManager(
       executorId: String, oapRpcManagerEndpoint: RpcEndpointRef) extends ToOapRpcManagerMaster
-  // The parameters currently are just for occupation
-  case class CacheMetrics(some: Int) extends HeartBeat
-  case class IndexMetrics(some: Int) extends HeartBeat
 
 }
