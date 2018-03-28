@@ -31,11 +31,12 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * Similar OapRpcManager class with [[OapRpcManagerMaster]], however running on Executor
  */
 private[spark] class OapRpcManagerSlave(
-  rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String, conf: SparkConf)
-    extends OapRpcManager {
+    rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String, conf: SparkConf)
+      extends OapRpcManager {
 
   // Send OapHeartbeatMessage to Driver timed
-  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
+  private val oapHeartbeater =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     s"OapRpcManagerSlave_$executorId", new OapRpcManagerSlaveEndpoint(rpcEnv))
@@ -48,23 +49,22 @@ private[spark] class OapRpcManagerSlave(
 
   override private[spark] def send(message: OapMessage): Unit = driverEndpoint.send(message)
 
-  private def reportHeartBeat(getMaterials: Seq[() => HeartBeat]): Unit = {
+  private def reportHeartbeat(getMaterials: Seq[() => Heartbeat]): Unit = {
     val materials = getMaterials.map(_.apply())
     materials.foreach(send)
   }
 
-  private[spark] def sendHearBeat(getMaterials: Seq[() => HeartBeat]): Unit = {
-    val MS = 1000
-    val intervalMs = MS * conf.getInt(
-          OapConf.OAP_HEARTBEAT_INTERVAL.key, OapConf.OAP_HEARTBEAT_INTERVAL.defaultValue.get)
+  private[spark] def sendHearbeat(getMaterials: Seq[() => Heartbeat]): Unit = {
+    val intervalMs = conf.getTimeAsMs(OapConf.OAP_HEARTBEAT_INTERVAL.key)
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
 
     val heartbeatTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat(getMaterials))
+      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartbeat(getMaterials))
     }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
+    oapHeartbeater.scheduleAtFixedRate(
+      heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 }
 

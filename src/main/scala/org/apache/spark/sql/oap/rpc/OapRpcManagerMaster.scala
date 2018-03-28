@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.sql.oap.rpc.OapMessages.{HeartBeat, MyDummyMessage, OapMessage, RegisterOapRpcManager}
+import org.apache.spark.sql.oap.rpc.OapMessages.{Heartbeat, MyDummyMessage, OapMessage, RegisterOapRpcManager}
 
 /**
  * An OapRpcManager running on Driver to send messages to Executors, get this object from SparkEnv
@@ -59,7 +59,7 @@ private[spark] class OapRpcManagerMasterEndpoint(
 
   override def receive: PartialFunction[Any, Unit] = {
     case message: MyDummyMessage => handleDummyMessage(message)
-    case message: HeartBeat => handleHeartBeat(message)
+    case message: Heartbeat => handleHeartbeat(message)
     case _ =>
   }
 
@@ -73,7 +73,7 @@ private[spark] class OapRpcManagerMasterEndpoint(
       logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
   }
 
-  private def handleHeartBeat(heartBeat: HeartBeat) = heartBeat match {
+  private def handleHeartbeat(heartbeat: Heartbeat) = heartbeat match {
     // Handling different subclass of HeartBeat here
     case _ =>
   }

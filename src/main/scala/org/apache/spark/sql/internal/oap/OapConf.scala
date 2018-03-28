@@ -177,10 +177,10 @@ object OapConf {
     .createWithDefault("")
 
   val OAP_HEARTBEAT_INTERVAL =
-    SQLConfigBuilder("spark.sql.oap.heartbeat.interval")
+    SQLConfigBuilder("spark.sql.oap.heartbeatInterval")
     .internal()
     .doc("To Configure the OAP status update interval, for example OAP metrics")
-    .intConf
-    .createWithDefault(2)
+    .stringConf
+    .createWithDefault("2s")
 
 }
