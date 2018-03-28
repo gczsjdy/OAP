@@ -32,7 +32,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  */
 private[spark] class OapRpcManagerSlave(
     rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String, conf: SparkConf)
-      extends OapRpcManager {
+        extends OapRpcManager {
 
   // Send OapHeartbeatMessage to Driver timed
   private val oapHeartbeater =
