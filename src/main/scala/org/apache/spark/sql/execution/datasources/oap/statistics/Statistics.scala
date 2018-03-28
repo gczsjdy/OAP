@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.execution.datasources.oap.utils.{NonNullKeyReader, NonNullKeyWriter}
 import org.apache.spark.sql.types._
 
-
 abstract class StatisticsReader(schema: StructType) {
   val id: Int
   @transient
@@ -56,8 +55,8 @@ abstract class StatisticsReader(schema: StructType) {
    * @param intervalArray query intervals from `IndexContext`
    * @return the `StaticsAnalysisResult`
    */
-  def analyse(intervalArray: ArrayBuffer[RangeInterval]): Double =
-    StaticsAnalysisResult.USE_INDEX
+  def analyse(intervalArray: ArrayBuffer[RangeInterval]): StatsAnalysisResult =
+    StatsAnalysisResult.USE_INDEX
 }
 
 abstract class StatisticsWriter(schema: StructType, conf: Configuration) {
@@ -72,8 +71,7 @@ abstract class StatisticsWriter(schema: StructType, conf: Configuration) {
    * `StatisticsManager`. This function does nothing for most cases.
    * @param key an InternalRow from index partition
    */
-  def addOapKey(key: Key): Unit = {
-  }
+  def addOapKey(key: Key): Unit = {}
 
   /**
    * Statistics write function, by default, only a Statistics id should be
@@ -138,12 +136,14 @@ object Statistics {
 }
 
 /**
- * StaticsAnalysisResult should be one of these following values,
+ * StatsAnalysisResult should be one of these following values,
  * or a double value between 0 and 1, standing for the estimated
  * coverage form this content.
  */
-object StaticsAnalysisResult {
-  val FULL_SCAN = 1
-  val SKIP_INDEX = -1
-  val USE_INDEX = 0
+object StatsAnalysisResult {
+  val FULL_SCAN = StatsAnalysisResult(1)
+  val SKIP_INDEX = StatsAnalysisResult(-1)
+  val USE_INDEX = StatsAnalysisResult(0)
 }
+
+case class StatsAnalysisResult(coverage: Double)

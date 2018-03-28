@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.types._
 
-
 private[oap] class BloomFilterStatisticsReader(
     schema: StructType) extends StatisticsReader(schema) {
   override val id: Int = StatisticsType.TYPE_BLOOM_FILTER
@@ -67,7 +66,7 @@ private[oap] class BloomFilterStatisticsReader(
     readOffset - offset
   }
 
-  override def analyse(intervalArray: ArrayBuffer[RangeInterval]): Double = {
+  override def analyse(intervalArray: ArrayBuffer[RangeInterval]): StatsAnalysisResult = {
 
     val partialSchema = StructType(schema.dropRight(1))
     val partialConverter = UnsafeProjection.create(partialSchema)
@@ -99,15 +98,16 @@ private[oap] class BloomFilterStatisticsReader(
     }
 
     if (skipIndex) {
-      StaticsAnalysisResult.SKIP_INDEX
+      StatsAnalysisResult.SKIP_INDEX
     } else {
-      StaticsAnalysisResult.USE_INDEX
+      StatsAnalysisResult.USE_INDEX
     }
   }
 }
 
 private[oap] class BloomFilterStatisticsWriter(
-    schema: StructType, conf: Configuration) extends StatisticsWriter(schema, conf) {
+    schema: StructType,
+    conf: Configuration) extends StatisticsWriter(schema, conf) {
   override val id: Int = StatisticsType.TYPE_BLOOM_FILTER
 
   protected var bfIndex: BloomFilter = new BloomFilter(bfMaxBits, bfHashFuncs)()

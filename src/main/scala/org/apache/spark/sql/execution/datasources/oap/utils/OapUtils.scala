@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, Key, OapF
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-
 /**
  * Utils for Oap
  */
@@ -50,8 +49,9 @@ object OapUtils extends Logging {
     }
   }
 
-  def getPartitions(fileIndex: FileIndex,
-                    partitionSpec: Option[TablePartitionSpec] = None): Seq[PartitionDirectory] = {
+  def getPartitions(
+      fileIndex: FileIndex,
+      partitionSpec: Option[TablePartitionSpec] = None): Seq[PartitionDirectory] = {
     val filters = if (partitionSpec.nonEmpty) {
       val partitionColumnsInfo: Map[String, DataType] =
         fileIndex.partitionSchema.map {
@@ -70,6 +70,12 @@ object OapUtils extends Logging {
           case IntegerType => value.toInt
           case LongType => value.toLong
           case BooleanType => value.toBoolean
+          case DateType => java.sql.Date.valueOf(value)
+          case DoubleType => value.toDouble
+          case FloatType => value.toFloat
+          case ByteType => value.toByte
+          case ShortType => value.toShort
+          // OapFileFormat only support the above partition key type.
           case _: DataType =>
             throw new AnalysisException(
               s"Only handle partition key type in common use, check the partition key type:" +

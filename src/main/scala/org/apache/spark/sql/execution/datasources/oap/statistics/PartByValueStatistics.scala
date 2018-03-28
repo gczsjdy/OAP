@@ -51,8 +51,6 @@ private[oap] class PartByValueStatisticsReader(schema: StructType)
   @transient private lazy val partialOrdering =
     GenerateOrdering.create(StructType(schema.dropRight(1)))
 
-  protected case class PartedByValueMeta(
-      idx: Int, row: InternalRow, curMaxId: Int, accumulatorCnt: Int)
   protected lazy val metas: ArrayBuffer[PartedByValueMeta] = new ArrayBuffer[PartedByValueMeta]()
 
   override def read(fiberCache: FiberCache, offset: Int): Int = {
@@ -110,7 +108,7 @@ private[oap] class PartByValueStatisticsReader(schema: StructType)
     getIntervalIdx(end, include, isStart = false)
   }
 
-  override def analyse(intervalArray: ArrayBuffer[RangeInterval]): Double = {
+  override def analyse(intervalArray: ArrayBuffer[RangeInterval]): StatsAnalysisResult = {
     if (metas.nonEmpty) {
       val wholeCount = metas.last.accumulatorCnt
 
@@ -122,7 +120,7 @@ private[oap] class PartByValueStatisticsReader(schema: StructType)
 
       if (left == -1 || right == 0) {
         // interval.min > partition.max || interval.max < partition.min
-        StaticsAnalysisResult.SKIP_INDEX
+        StatsAnalysisResult.SKIP_INDEX
       } else {
         var cover: Double =
           if (right != -1) metas(right).accumulatorCnt else metas.last.accumulatorCnt
@@ -137,15 +135,15 @@ private[oap] class PartByValueStatisticsReader(schema: StructType)
         }
 
         if (cover > wholeCount) {
-          StaticsAnalysisResult.FULL_SCAN
+          StatsAnalysisResult.FULL_SCAN
         } else if (cover < 0) {
-          StaticsAnalysisResult.USE_INDEX
+          StatsAnalysisResult.USE_INDEX
         } else {
-          cover / wholeCount
+          StatsAnalysisResult(cover / wholeCount)
         }
       }
     } else {
-      StaticsAnalysisResult.USE_INDEX
+      StatsAnalysisResult.USE_INDEX
     }
   }
 }
@@ -158,8 +156,6 @@ private[oap] class PartByValueStatisticsWriter(schema: StructType, conf: Configu
     OapConf.OAP_STATISTICS_PART_NUM.key, OapConf.OAP_STATISTICS_PART_NUM.defaultValue.get)
   @transient private lazy val ordering = GenerateOrdering.create(schema)
 
-  protected case class PartedByValueMeta(
-      idx: Int, row: InternalRow, curMaxId: Int, accumulatorCnt: Int)
   protected lazy val metas: ArrayBuffer[PartedByValueMeta] = new ArrayBuffer[PartedByValueMeta]()
 
   override def write(writer: OutputStream, sortedKeys: ArrayBuffer[Key]): Int = {
@@ -237,3 +233,9 @@ private[oap] class PartByValueStatisticsWriter(schema: StructType, conf: Configu
     }
   }
 }
+
+private[oap] case class PartedByValueMeta(
+    idx: Int,
+    row: InternalRow,
+    curMaxId: Int,
+    accumulatorCnt: Int)

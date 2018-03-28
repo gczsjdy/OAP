@@ -147,6 +147,13 @@ object OapConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OAP_ENABLE_OPTIMIZATION_STRATEGIES =
+    SQLConfigBuilder("spark.sql.oap.strategies.enabled")
+      .internal()
+      .doc("To indicate if enable/disable oap strategies")
+      .booleanConf
+      .createWithDefault(false)
+
   val OAP_INDEX_FILE_SIZE_MAX_RATIO =
     SQLConfigBuilder("spark.sql.oap.oindex.size.ratio")
       .internal()
@@ -183,4 +190,10 @@ object OapConf {
     .stringConf
     .createWithDefault("2s")
 
+  val OAP_UPDATE_FIBER_CACHE_METRICS_INTERVAL_SEC =
+    SQLConfigBuilder("spark.sql.oap.update.fiber.cache.metrics.interval.sec")
+      .internal()
+      .doc("The interval of fiber cache metrics update")
+      .longConf
+      .createWithDefault(10L)
 }

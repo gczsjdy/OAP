@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.filecache._
 import org.apache.spark.sql.execution.datasources.oap.io.IndexFile
-import org.apache.spark.sql.execution.datasources.oap.statistics.StatisticsManager
+import org.apache.spark.sql.execution.datasources.oap.statistics.{StatisticsManager, StatsAnalysisResult}
 import org.apache.spark.sql.execution.datasources.oap.utils.NonNullKeyReader
 import org.apache.spark.util.ShutdownHookManager
 
@@ -102,7 +102,9 @@ private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(i
     }
   }
 
-  override protected def analyzeStatistics(indexPath: Path, conf: Configuration): Double = {
+  override protected def analyzeStatistics(
+      indexPath: Path,
+      conf: Configuration): StatsAnalysisResult = {
     var bmStatsContentCache: WrappedFiberCache = null
     try {
       val fs = indexPath.getFileSystem(conf)
@@ -250,7 +252,8 @@ private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(i
     startIdxOffset
   }
 
-  private def getBitmapIdx(keySeq: IndexedSeq[InternalRow],
+  private def getBitmapIdx(
+      keySeq: IndexedSeq[InternalRow],
       range: RangeInterval): (Int, Int) = {
     val keyLength = keySeq.length
     val startIdx = if (range.start == IndexScanner.DUMMY_KEY_START) {
@@ -296,8 +299,11 @@ private[oap] case class BitMapScanner(idxMeta: IndexMeta) extends IndexScanner(i
     (startIdx, endIdx)
   }
 
-  private def getDesiredBitmaps(byteCache: FiberCache, position: Int,
-      startIdx: Int, endIdx: Int): IndexedSeq[RoaringBitmap] = {
+  private def getDesiredBitmaps(
+      byteCache: FiberCache,
+      position: Int,
+      startIdx: Int,
+      endIdx: Int): IndexedSeq[RoaringBitmap] = {
     if (byteCache.size() != 0) {
       val bmStream = new BitmapDataInputStream(byteCache)
       bmStream.skipBytes(position)

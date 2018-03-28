@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCache
 import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.types.StructType
 
-
 private[oap] class MinMaxStatisticsReader(schema: StructType) extends StatisticsReader(schema) {
   override val id: Int = StatisticsType.TYPE_MIN_MAX
 
@@ -52,9 +51,9 @@ private[oap] class MinMaxStatisticsReader(schema: StructType) extends Statistics
     readOffset - offset
   }
 
-  override def analyse(intervalArray: ArrayBuffer[RangeInterval]): Double = {
+  override def analyse(intervalArray: ArrayBuffer[RangeInterval]): StatsAnalysisResult = {
     if (min == null || max == null) {
-      return StaticsAnalysisResult.USE_INDEX
+      return StatsAnalysisResult.USE_INDEX
     }
 
     val start = intervalArray.head
@@ -78,15 +77,16 @@ private[oap] class MinMaxStatisticsReader(schema: StructType) extends Statistics
       }
 
     if (startOutOfBound || endOutOfBound) {
-      StaticsAnalysisResult.SKIP_INDEX
+      StatsAnalysisResult.SKIP_INDEX
     } else {
-      StaticsAnalysisResult.USE_INDEX
+      StatsAnalysisResult.USE_INDEX
     }
   }
 }
 
 private[oap] class MinMaxStatisticsWriter(
-    schema: StructType, conf: Configuration) extends StatisticsWriter(schema, conf) {
+    schema: StructType,
+    conf: Configuration) extends StatisticsWriter(schema, conf) {
   override val id: Int = StatisticsType.TYPE_MIN_MAX
   @transient
   private lazy val ordering = GenerateOrdering.create(schema)

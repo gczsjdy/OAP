@@ -24,20 +24,18 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.expressions.codegen.{BaseOrdering, GenerateOrdering}
 import org.apache.spark.sql.execution.datasources.oap.filecache.{BTreeFiber, FiberCache, FiberCacheManager, WrappedFiberCache}
 import org.apache.spark.sql.execution.datasources.oap.utils.NonNullKeyReader
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
-
 private[index] case class BTreeIndexRecordReader(
     configuration: Configuration,
     schema: StructType) extends Iterator[Int] {
+  import BTreeIndexRecordReader.{BTreeFooter, BTreeRowIdList, BTreeNodeData}
 
   private var internalIterator: Iterator[Int] = _
-
-  import BTreeIndexRecordReader.{BTreeFooter, BTreeRowIdList, BTreeNodeData}
   private var footer: BTreeFooter = _
   private var footerFiber: BTreeFiber = _
   private var footerCache: WrappedFiberCache = _
@@ -47,6 +45,10 @@ private[index] case class BTreeIndexRecordReader(
 
   private lazy val ordering = GenerateOrdering.create(schema)
   private lazy val partialOrdering = GenerateOrdering.create(StructType(schema.dropRight(1)))
+
+  type CompareFunction = (InternalRow, InternalRow, Boolean) => Int
+
+  def getFooterFiber: FiberCache = footerCache.fc
 
   def initialize(path: Path, intervalArray: ArrayBuffer[RangeInterval]): Unit = {
     reader = BTreeIndexFileReader(configuration, path)
@@ -80,16 +82,20 @@ private[index] case class BTreeIndexRecordReader(
       }
     } // get the row ids
   }
+
   // find the row id list start pos, end pos of the range interval
   private[index] def findRowIdRange(interval: RangeInterval): (Int, Int) = {
+    val compareFunc: CompareFunction =
+      if (interval.isPrefixMatch) rowOrderingPattern else rowOrdering
     val recordCount = footer.getNonNullKeyRecordCount
     if (interval.isNullPredicate) { // process "isNull" predicate
       return (recordCount, recordCount + footer.getNullKeyRecordCount)
     }
-    val (nodeIdxForStart, isStartFound) = findNodeIdx(interval.start, isStart = true)
-    val (nodeIdxForEnd, isEndFound) = findNodeIdx(interval.end, isStart = false)
+    val nodeIdxForStart = findNodeIdx(interval.start, isStart = true, compareFunc)
+    val nodeIdxForEnd = findNodeIdx(interval.end, isStart = false, compareFunc)
 
-    if (nodeIdxForStart == nodeIdxForEnd && !isStartFound && !isEndFound) {
+    if (nodeIdxForStart.isEmpty || nodeIdxForEnd.isEmpty ||
+      nodeIdxForEnd.get < nodeIdxForStart.get) {
       (0, 0) // not found in B+ tree
     } else {
       val start =
@@ -97,7 +103,7 @@ private[index] case class BTreeIndexRecordReader(
           0
         } else {
           nodeIdxForStart.map { idx =>
-            findRowIdPos(idx, interval.start, isStart = true, !interval.startInclude)
+            findRowIdPos(idx, interval.start, isStart = true, !interval.startInclude, compareFunc)
           }.getOrElse(recordCount)
         }
       val end =
@@ -105,7 +111,7 @@ private[index] case class BTreeIndexRecordReader(
           recordCount
         } else {
           nodeIdxForEnd.map { idx =>
-            findRowIdPos(idx, interval.end, isStart = false, interval.endInclude)
+            findRowIdPos(idx, interval.end, isStart = false, interval.endInclude, compareFunc)
           }.getOrElse(recordCount)
         }
       (start, end)
@@ -116,7 +122,8 @@ private[index] case class BTreeIndexRecordReader(
       nodeIdx: Int,
       candidate: InternalRow,
       isStart: Boolean,
-      findNext: Boolean): Int = {
+      findNext: Boolean,
+      compareFunc: CompareFunction = rowOrdering): Int = {
 
     val nodeFiber = BTreeFiber(
       () => reader.readNode(footer.getNodeOffset(nodeIdx), footer.getNodeSize(nodeIdx)),
@@ -130,9 +137,13 @@ private[index] case class BTreeIndexRecordReader(
 
     val keyCount = node.getKeyCount
 
-    val (pos, found) =
-      IndexUtils.binarySearch(0, keyCount, node.getKey(_, schema), candidate,
-        rowOrdering(_, _, isStart))
+    val (pos, found) = if (isStart) {
+      IndexUtils.binarySearchForStart(
+        0, keyCount, node.getKey(_, schema), candidate, compareFunc(_, _, isStart))
+    } else {
+      IndexUtils.binarySearchForEnd(
+        0, keyCount, node.getKey(_, schema), candidate, compareFunc(_, _, isStart))
+    }
 
     val keyPos = if (found && findNext) pos + 1 else pos
 
@@ -168,16 +179,21 @@ private[index] case class BTreeIndexRecordReader(
    * @param isStart to indicate if the candidate is interval.start or interval.end
    * @return Option of Node index and if candidate falls in node (means min <= candidate < max)
    */
-  private def findNodeIdx(candidate: InternalRow, isStart: Boolean): (Option[Int], Boolean) = {
-    val idxOption = (0 until footer.getNodesCount).find { idx =>
-      footer.getRowCountOfNode(idx) > 0 && // ensure this node is not an empty node
-        rowOrdering(candidate, footer.getMaxValue(idx, schema), isStart) <= 0
+  private def findNodeIdx(
+      candidate: InternalRow,
+      isStart: Boolean,
+      compareFunc: CompareFunction = rowOrdering): Option[Int] = {
+    if (isStart) {
+      (0 until footer.getNodesCount).find { idx =>
+        footer.getRowCountOfNode(idx) > 0 && // ensure this node is not an empty node
+          compareFunc(candidate, footer.getMaxValue(idx, schema), true) <= 0
+      }
+    } else {
+      (0 until footer.getNodesCount).reverse.find { idx =>
+        footer.getRowCountOfNode(idx) > 0 && // ensure this node is not an empty node
+          compareFunc(candidate, footer.getMinValue(idx, schema), false) >= 0
+      }
     }
-
-    (idxOption, idxOption.exists { idx =>
-      footer.getRowCountOfNode(idx) > 0 && // ensure this node is not an empty node
-        rowOrdering(candidate, footer.getMinValue(idx, schema), isStart) >= 0
-    })
   }
 
   /**
@@ -200,6 +216,27 @@ private[index] case class BTreeIndexRecordReader(
       -rowOrdering(y, x, isStart) // Keep x.numFields <= y.numFields to simplify
     }
   }
+
+  /**
+   * like [[rowOrdering]], but x should always from interval.start or interval.end for pattern,
+   * while y should be the other one from index records.
+   */
+  private[index] def rowOrderingPattern(x: InternalRow, y: InternalRow, isStart: Boolean): Int = {
+    // Note min/max == null has been handled elsewhere
+    // For pattern match queries, there is no dummy end and dummy start
+    assert(x.numFields == y.numFields)
+    if (x.numFields > 1) {
+      val partialRes = partialOrdering.compare(x, y)
+      if (partialRes != 0) {
+        return partialRes
+      }
+    }
+    val xStr = x.getString(schema.length - 1)
+    val yStr = y.getString(schema.length - 1)
+    if (strMatching(xStr, yStr)) 0 else xStr.compare(yStr)
+  }
+
+  private[index] def strMatching(xStr: String, yStr: String): Boolean = yStr.startsWith(xStr)
 
   def close(): Unit = {
     if (reader != null) {
@@ -235,29 +272,43 @@ private[index] object BTreeIndexRecordReader {
     @transient protected lazy val nnkr: NonNullKeyReader = new NonNullKeyReader(schema)
 
     def getVersionNum: Int = fiberCache.getInt(0)
+
     def getNonNullKeyRecordCount: Int = fiberCache.getInt(IndexUtils.INT_SIZE)
+
     def getNullKeyRecordCount: Int = fiberCache.getInt(IndexUtils.INT_SIZE * 2)
+
     def getNodesCount: Int = fiberCache.getInt(IndexUtils.INT_SIZE * 3)
+
     // get idx Node's max value
     def getMaxValue(idx: Int, schema: StructType): InternalRow =
       nnkr.readKey(fiberCache, getMaxValueOffset(idx))._1
+
     def getMinValue(idx: Int, schema: StructType): InternalRow =
       nnkr.readKey(fiberCache, getMinValueOffset(idx))._1
-    def getMinValueOffset(idx: Int): Int =
+
+    def getMinValueOffset(idx: Int): Int = {
       fiberCache.getInt(nodeMetaStart + nodeMetaByteSize * idx + minPosOffset) +
-          nodeMetaStart + nodeMetaByteSize * getNodesCount + statsLengthSize + getStatsLength
-    def getMaxValueOffset(idx: Int): Int =
+        nodeMetaStart + nodeMetaByteSize * getNodesCount + statsLengthSize + getStatsLength
+    }
+
+    def getMaxValueOffset(idx: Int): Int = {
       fiberCache.getInt(nodeMetaStart + nodeMetaByteSize * idx + maxPosOffset) +
         nodeMetaStart + nodeMetaByteSize * getNodesCount + statsLengthSize + getStatsLength
+    }
+
     def getRowCountOfNode(idx: Int): Int =
       fiberCache.getInt(nodeMetaStart + idx * nodeMetaByteSize)
+
     def getNodeOffset(idx: Int): Int =
       fiberCache.getInt(nodeMetaStart + idx * nodeMetaByteSize + nodePosOffset)
+
     def getNodeSize(idx: Int): Int =
       fiberCache.getInt(nodeMetaStart + idx * nodeMetaByteSize + nodeSizeOffset)
+
     def getStatsOffset: Int = nodeMetaStart + nodeMetaByteSize * getNodesCount + statsLengthSize
-    private def getStatsLength: Int = fiberCache.getInt(
-      nodeMetaStart + nodeMetaByteSize * getNodesCount)
+
+    private def getStatsLength: Int =
+      fiberCache.getInt(nodeMetaStart + nodeMetaByteSize * getNodesCount)
   }
 
   private[index] case class BTreeRowIdList(fiberCache: FiberCache) {
@@ -273,11 +324,13 @@ private[index] object BTreeIndexRecordReader {
     protected lazy val nnkr: NonNullKeyReader = new NonNullKeyReader(schema)
 
     def getKeyCount: Int = fiberCache.getInt(0)
+
     def getKey(idx: Int, schema: StructType): InternalRow = {
       val offset = valueSectionStart +
           fiberCache.getInt(posSectionStart + idx * posEntrySize)
       nnkr.readKey(fiberCache, offset)._1
     }
+
     def getRowIdPos(idx: Int): Int =
       fiberCache.getInt(posSectionStart + idx * posEntrySize + IndexUtils.INT_SIZE)
   }

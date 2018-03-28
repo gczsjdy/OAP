@@ -28,7 +28,6 @@ import org.apache.spark.sql.test.oap.SharedOapContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-
 class BTreeIndexScannerSuite extends SharedOapContext {
 
   // Override afterEach because we do not want to check open streams
@@ -173,6 +172,7 @@ class BTreeIndexScannerSuite extends SharedOapContext {
           IndexScanner.DUMMY_KEY_END,
           includeStart = true,
           includeEnd = true,
+          ignoreTail = false,
           isNull = true)) === (150, 150))
     reader.close()
   }
@@ -197,6 +197,7 @@ class BTreeIndexScannerSuite extends SharedOapContext {
           IndexScanner.DUMMY_KEY_END,
           includeStart = true,
           includeEnd = true,
+          ignoreTail = false,
           isNull = true)) === (150, 155))
     reader.close()
   }
