@@ -30,9 +30,4 @@ trait OapRpcManager extends Logging {
 
   private[spark] def send(message: OapMessage): Unit
 
-  // Different types of sending corresponding to interfaces in RpcEndpointRef, currently not used
-  // def ask[T: ClassTag](message: Any, timeout: RpcTimeout): Future[T]
-
-  // def askWithRetry[T: ClassTag](message: Any, timeout: RpcTimeout): T
-
 }

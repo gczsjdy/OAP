@@ -55,7 +55,8 @@ private[spark] class OapRpcManagerSlave(
   }
 
   private[spark] def sendHearbeat(getMaterials: Seq[() => Heartbeat]): Unit = {
-    val intervalMs = conf.getTimeAsMs(OapConf.OAP_HEARTBEAT_INTERVAL.key)
+    val intervalMs = conf.getTimeAsMs(
+      OapConf.OAP_HEARTBEAT_INTERVAL.key, OapConf.OAP_HEARTBEAT_INTERVAL.defaultValue.get)
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
@@ -77,7 +78,7 @@ private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
   }
 
   private def handleOapMessage(message: OapMessage): Unit = message match {
-    case MyDummyMessage(id, someContent) =>
+    case DummyMessage(id, someContent) =>
       logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
     case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
     case _ =>

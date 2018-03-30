@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.sql.oap.rpc.OapMessages.{Heartbeat, MyDummyMessage, OapMessage, RegisterOapRpcManager}
+import org.apache.spark.sql.oap.rpc.OapMessages._
 
 /**
  * An OapRpcManager running on Driver to send messages to Executors, get this object from SparkEnv
@@ -58,8 +58,8 @@ private[spark] class OapRpcManagerMasterEndpoint(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
-    case message: MyDummyMessage => handleDummyMessage(message)
-    case message: Heartbeat => handleHeartbeat(message)
+    case heartbeat: Heartbeat => handleHeartbeat(heartbeat)
+    case message: OapMessage => handleNormalOapMessage(message)
     case _ =>
   }
 
@@ -68,13 +68,18 @@ private[spark] class OapRpcManagerMasterEndpoint(
     true
   }
 
-  private def handleDummyMessage(dummyMessage: MyDummyMessage) = dummyMessage match {
-    case MyDummyMessage(id, someContent) =>
+  private def handleNormalOapMessage(message: OapMessage) = message match {
+    case _: Heartbeat => throw new IllegalArgumentException(
+      "This is only to deal with non-heartbeat messages")
+    case DummyMessage(id, someContent) =>
+      val c = this.getClass.getMethods
       logWarning(s"Dummy message received on Driver with id: $id, content: $someContent")
+    case _ =>
   }
 
   private def handleHeartbeat(heartbeat: Heartbeat) = heartbeat match {
-    // Handling different subclass of HeartBeat here
+    case DummyHeartbeat(someContent) =>
+      logWarning(s"Dummy message received on Driver with content: $someContent")
     case _ =>
   }
 }
