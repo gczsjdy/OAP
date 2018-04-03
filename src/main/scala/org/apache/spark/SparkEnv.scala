@@ -449,3 +449,4 @@ object SparkEnv extends Logging {
       "Classpath Entries" -> classPaths)
   }
 }
+
