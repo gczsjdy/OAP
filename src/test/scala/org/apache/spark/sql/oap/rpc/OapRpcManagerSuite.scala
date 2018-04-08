@@ -98,7 +98,7 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
   test("Send heartbeat message from Executor to Driver") {
     val rpcManagerSlave1 = addRpcManagerSlave(executorId1)
 
-    rpcManagerSlave1.registerHearbeat(Seq(() => heartbeat))
+    rpcManagerSlave1.registerHeartbeat(Seq(() => heartbeat))
 
     // Initial delay is at most 2 * interval
     Thread.sleep(2000 + 2 * sc.conf.getTimeAsMs(
