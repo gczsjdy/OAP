@@ -199,12 +199,13 @@ private[oap] class OapDataReader(
   registerHeartbeat()
 
   private def registerHeartbeat(): Unit = {
-    val executorId = SparkEnv.get.executorId
-    val blockManagerId = SparkEnv.get.blockManager.blockManagerId
-    val conf = SparkEnv.get.conf
+    val sparkEnv = SparkEnv.get
+    val executorId = sparkEnv.executorId
+    val blockManagerId = sparkEnv.blockManager.blockManagerId
+    val conf = sparkEnv.conf
     val indexHeartbeat = () => IndexHeartbeat(executorId, blockManagerId, OapIndexInfo.status)
-    SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave]
-      .registerHeartbeat(Seq(indexHeartbeat))
+
+    sparkEnv.oapRpcManager.asInstanceOf[OapRpcManagerSlave].registerHeartbeat(Seq(indexHeartbeat))
   }
 
   private var _rowsReadWhenHitIndex: Option[Long] = None

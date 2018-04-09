@@ -31,7 +31,7 @@ import org.apache.spark.sql.oap.rpc.OapMessages._
  *                                    messages' receiving
  */
 private[spark] class OapRpcManagerMaster(oapRpcManagerMasterEndpoint: OapRpcManagerMasterEndpoint)
-    extends OapRpcManager with Logging {
+  extends OapRpcManager with Logging {
 
   private def sendOneWayMessageToExecutors(message: OapMessage): Unit = {
     oapRpcManagerMasterEndpoint.rpcEndpointRefByExecutor.foreach {
