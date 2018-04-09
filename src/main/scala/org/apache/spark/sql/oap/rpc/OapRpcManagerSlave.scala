@@ -34,8 +34,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * Similar OapRpcManager class with [[OapRpcManagerMaster]], however running on Executor
  */
 private[spark] class OapRpcManagerSlave(
-    rpcEnv: RpcEnv, val driverEndpoint: RpcEndpointRef, executorId: String, conf: SparkConf)
-        extends OapRpcManager {
+    rpcEnv: RpcEnv,
+    val driverEndpoint: RpcEndpointRef,
+    executorId: String,
+    conf: SparkConf)
+  extends OapRpcManager {
 
   // Send OapHeartbeatMessage to Driver timed
   private val oapHeartbeater =
