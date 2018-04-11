@@ -82,6 +82,7 @@ private[spark] class OapRpcManagerSlave(
   }
 
   private[spark] def registerHearbeat(getMaterials: Seq[() => Heartbeat]): Unit = {
+    import scala.language.postfixOps
     getMaterials.foreach(oapHeartbeatMaterials +=)
   }
 }
