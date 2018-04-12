@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.oap.filecache
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SparkListenerCustomInfoUpdate
@@ -88,6 +87,8 @@ class FiberSensorSuite extends QueryTest with SharedOapContext
         dataFileCount += 1L
       }
     }
+
+    FiberCacheManager.registerHeartbeat()
 
     // Only one executor in local-mode, each data file has 4 dataFiber(2 cols * 2 rgs/col)
     // wait for a heartbeat
