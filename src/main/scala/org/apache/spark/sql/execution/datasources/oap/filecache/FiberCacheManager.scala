@@ -93,7 +93,7 @@ object FiberCacheManager extends Logging {
 
   registerHeartbeat()
 
-  private def registerHeartbeat(): Unit = {
+  private[spark] def registerHeartbeat(): Unit = {
     val sparkEnv = SparkEnv.get
     val executorId = sparkEnv.executorId
     val blockManagerId = sparkEnv.blockManager.blockManagerId
