@@ -25,8 +25,7 @@ private[oap] trait Fiber {
   def fiber2Data(conf: Configuration): FiberCache
 }
 
-private[oap]
-case class DataFiber(file: DataFile, columnIndex: Int, rowGroupId: Int) extends Fiber {
+private[oap] case class DataFiber(file: DataFile, columnIndex: Int, rowGroupId: Int) extends Fiber {
   override def fiber2Data(conf: Configuration): FiberCache =
     file.getFiberData(rowGroupId, columnIndex)
 
@@ -45,12 +44,11 @@ case class DataFiber(file: DataFile, columnIndex: Int, rowGroupId: Int) extends 
   }
 }
 
-private[oap]
-case class BTreeFiber(
-  getFiberData: () => FiberCache,
-  file: String,
-  section: Int,
-  idx: Int) extends Fiber {
+private[oap] case class BTreeFiber(
+    getFiberData: () => FiberCache,
+    file: String,
+    section: Int,
+    idx: Int) extends Fiber {
   override def fiber2Data(conf: Configuration): FiberCache = getFiberData()
 
   override def hashCode(): Int = (file + section + idx).hashCode
@@ -68,14 +66,13 @@ case class BTreeFiber(
   }
 }
 
-private[oap]
-case class BitmapFiber(
-  getFiberData: () => FiberCache,
-  file: String,
-  // "0" means no split sections within file.
-  sectionIdxOfFile: Int,
-  // "0" means no smaller loading units.
-  loadUnitIdxOfSection: Int) extends Fiber {
+private[oap] case class BitmapFiber(
+    getFiberData: () => FiberCache,
+    file: String,
+    // "0" means no split sections within file.
+    sectionIdxOfFile: Int,
+    // "0" means no smaller loading units.
+    loadUnitIdxOfSection: Int) extends Fiber {
   override def fiber2Data(conf: Configuration): FiberCache = getFiberData()
 
   override def hashCode(): Int = (file + sectionIdxOfFile + loadUnitIdxOfSection).hashCode
