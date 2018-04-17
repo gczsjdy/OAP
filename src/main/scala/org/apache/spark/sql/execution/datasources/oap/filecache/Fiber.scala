@@ -21,11 +21,6 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.execution.datasources.oap.io.DataFile
 
-private[filecache] object FiberType extends Enumeration {
-  type FiberType = Value
-  val Index, Data = Value
-}
-
 private[oap] trait Fiber {
   def fiber2Data(conf: Configuration): FiberCache
 }

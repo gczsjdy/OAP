@@ -25,7 +25,6 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.execution.datasources.OapException
-import org.apache.spark.sql.execution.datasources.oap.filecache.FiberType.FiberType
 import org.apache.spark.storage.{BlockManager, TestBlockId}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.{MemoryAllocator, MemoryBlock}
@@ -85,19 +84,19 @@ private[oap] object MemoryManager extends Logging {
   }
 
   // Used by IndexFile
-  def toIndexFiberCache(in: FSDataInputStream, position: Long, length: Int): IndexFiberCache = {
+  def toIndexFiberCache(in: FSDataInputStream, position: Long, length: Int): FiberCache = {
     val bytes = new Array[Byte](length)
     in.readFully(position, bytes)
-    toFiberCache(bytes, FiberType.Index).asInstanceOf[IndexFiberCache]
+    toFiberCache(bytes)
   }
 
   // Used by OapDataFile since we need to parse the raw data in on-heap memory before put it into
   // off-heap memory
-  def toDataFiberCache(bytes: Array[Byte]): DataFiberCache = {
-    toFiberCache(bytes, FiberType.Data).asInstanceOf[DataFiberCache]
+  def toDataFiberCache(bytes: Array[Byte]): FiberCache = {
+    toFiberCache(bytes)
   }
 
-  private def toFiberCache(bytes: Array[Byte], fiberType: FiberType): FiberCache = {
+  private def toFiberCache(bytes: Array[Byte]): FiberCache = {
     val memoryBlock = allocate(bytes.length)
     Platform.copyMemory(
       bytes,
@@ -105,10 +104,6 @@ private[oap] object MemoryManager extends Logging {
       memoryBlock.getBaseObject,
       memoryBlock.getBaseOffset,
       bytes.length)
-    if (fiberType == FiberType.Index) {
-      IndexFiberCache(memoryBlock)
-    } else {
-      DataFiberCache(memoryBlock)
-    }
+    FiberCache(memoryBlock)
   }
 }

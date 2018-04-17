@@ -28,10 +28,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.unsafe.types.UTF8String
 
 // TODO: make it an alias of MemoryBlock
-trait FiberCache extends Logging {
-
-  // In our design, fiberData should be a internal member.
-  protected def fiberData: MemoryBlock
+case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
 
   // We use readLock to lock occupy. _refCount need be atomic to make sure thread-safe
   protected val _refCount = new AtomicLong(0)
@@ -88,7 +85,7 @@ trait FiberCache extends Logging {
     disposed = true
   }
 
-  /** For debug purpose */
+  // For debugging
   def toArray: Array[Byte] = {
     // TODO: Handle overflow
     val bytes = new Array[Byte](fiberData.size().toInt)
@@ -160,15 +157,9 @@ case class WrappedFiberCache(fc: FiberCache) {
 }
 
 object FiberCache {
-  // Give test suite a way to convert Array[Byte] to FiberCache. For test purpose.
+  //  For test purpose :convert Array[Byte] to FiberCache
   private[oap] def apply(data: Array[Byte]): FiberCache = {
     val memoryBlock = new MemoryBlock(data, Platform.BYTE_ARRAY_OFFSET, data.length)
-    DataFiberCache(memoryBlock)
+    FiberCache(memoryBlock)
   }
 }
-
-// Data fiber caching, the in-memory representation can be found at [[DataFiberBuilder]]
-case class DataFiberCache(fiberData: MemoryBlock) extends FiberCache
-
-// Index fiber caching, only used internally by Oap
-private[oap] case class IndexFiberCache(fiberData: MemoryBlock) extends FiberCache
