@@ -88,6 +88,8 @@ class FiberSensorSuite extends QueryTest with SharedOapContext
       }
     }
 
+    FiberCacheManager.registerHeartbeat()
+
     // Only one executor in local-mode, each data file has 4 dataFiber(2 cols * 2 rgs/col)
     // wait for a heartbeat
     Thread.sleep(20 * 1000)
