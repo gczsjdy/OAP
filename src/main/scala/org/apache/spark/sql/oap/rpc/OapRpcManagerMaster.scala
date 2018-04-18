@@ -89,8 +89,6 @@ private[spark] class OapRpcManagerMasterEndpoint(
     case IndexHeartbeat(executorId, blockManagerId, content) =>
       SparkContext.getOrCreate().listenerBus.post(SparkListenerOapIndexInfoUpdate(
         blockManagerId.host, executorId, content))
-    case DummyHeartbeat(someContent) =>
-      logWarning(s"Dummy message received on Driver with content: $someContent")
     case _ =>
   }
 }

@@ -85,7 +85,7 @@ private[spark] class OapRpcManagerSlave(
   }
 
   private[spark] def registerHeartbeat(getMaterials: Seq[() => Heartbeat]): Unit = {
-    getMaterials.foreach(oapHeartbeatMaterials +=)
+    getMaterials.foreach(oapHeartbeatMaterials += _)
   }
 }
 
@@ -98,8 +98,6 @@ private[spark] class OapRpcManagerSlaveEndpoint(override val rpcEnv: RpcEnv)
   }
 
   private def handleOapMessage(message: OapMessage): Unit = message match {
-    case DummyMessage(id, someContent) =>
-      logWarning(s"Dummy message received on Executor with id: $id, content: $someContent")
     case CacheDrop(indexName) => FiberCacheManager.removeIndexCache(indexName)
     case _ =>
   }
