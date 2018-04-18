@@ -28,7 +28,7 @@ private[spark] object OapMessages {
   sealed trait ToOapRpcManagerMaster extends OapMessage
   sealed trait Heartbeat extends ToOapRpcManagerMaster
 
-  /* Two-way messages */
+  /* Two-way messages, this is just for test */
   case class DummyMessage(id: String, someContent: String) extends
     ToOapRpcManagerSlave with ToOapRpcManagerMaster
 
@@ -40,9 +40,9 @@ private[spark] object OapMessages {
       executorId: String, oapRpcManagerEndpoint: RpcEndpointRef) extends ToOapRpcManagerMaster
   case class DummyHeartbeat(someContent: String) extends Heartbeat
   case class FiberCacheHeartbeat(
-    executorId: String, blockManagerId: BlockManagerId, content: String) extends Heartbeat
+      executorId: String, blockManagerId: BlockManagerId, content: String) extends Heartbeat
   case class IndexHeartbeat(executorId: String, blockManagerId: BlockManagerId, content: String)
     extends Heartbeat
   case class FiberCacheMetricsHeartbeat(
-    executorId: String, blockManagerId: BlockManagerId, content: String) extends Heartbeat
+      executorId: String, blockManagerId: BlockManagerId, content: String) extends Heartbeat
 }
