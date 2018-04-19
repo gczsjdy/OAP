@@ -215,8 +215,8 @@ private[oap] object DataFileHandleCacheManager extends Logging {
         }
       })
 
-  def apply(fiberCache: DataFile): OapDataFileHandle = {
-    cache.get(fiberCache).asInstanceOf[OapDataFileHandle]
+  def apply(fiberCache: DataFile): DataFileHandle = {
+    cache.get(fiberCache)
   }
 }
 
