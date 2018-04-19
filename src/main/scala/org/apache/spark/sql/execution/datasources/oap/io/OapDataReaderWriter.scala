@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFo
 import org.apache.spark.sql.execution.datasources.oap.filecache.DataFiberBuilder
 import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.execution.datasources.oap.utils.OapIndexInfoStatusSerDe
-import org.apache.spark.sql.oap.rpc.OapRpcManagerSlave
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.util.TimeStampedHashMap
 
@@ -56,7 +56,7 @@ private[oap] class OapDataWriter(
   private val rowGroup: Array[DataFiberBuilder] =
     DataFiberBuilder.initializeFromSchema(schema, ROW_GROUP_SIZE)
 
-  private val statisticsArray = ColumnStatistics.getStatsFromSchema(schema)
+  private var statisticsArray = ColumnStatistics.getStatsFromSchema(schema)
 
   private def updateStats(
       stats: ColumnStatistics.ParquetStatistics,
@@ -114,6 +114,8 @@ private[oap] class OapDataWriter(
     rowGroupMeta.withNewStart(out.getPos)
       .withNewFiberLens(fiberLens)
       .withNewUncompressedFiberLens(fiberUncompressedLens)
+      .withNewStatistics(statisticsArray.map(ColumnStatistics(_)).toArray)
+
     while (idx < rowGroup.length) {
       val fiberByteData = rowGroup(idx).build()
       val newUncompressedFiberData = fiberByteData.fiberData
@@ -125,7 +127,7 @@ private[oap] class OapDataWriter(
       rowGroup(idx).clear()
       idx += 1
     }
-
+    statisticsArray = ColumnStatistics.getStatsFromSchema(schema)
     fiberMeta.appendRowGroupMeta(rowGroupMeta.withNewEnd(out.getPos))
   }
 
@@ -144,8 +146,7 @@ private[oap] class OapDataWriter(
       if (dictionaryDataLength > 0) {
         out.write(dictByteData)
       }
-      fiberMeta.appendColumnMeta(new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize,
-        ColumnStatistics(statisticsArray(i))))
+      fiberMeta.appendColumnMeta(new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize))
     }
 
     // and update the group count and row count in the last group
@@ -207,7 +208,8 @@ private[oap] class OapDataReader(
 
   def initialize(
       conf: Configuration,
-      options: Map[String, String] = Map.empty): OapIterator[InternalRow] = {
+      options: Map[String, String] = Map.empty,
+      filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
     logDebug("Initializing OapDataReader...")
     // TODO how to save the additional FS operation to get the Split size
     val fileScanner = DataFile(path.toString, meta.schema, meta.dataReaderClassName, conf)
@@ -239,8 +241,7 @@ private[oap] class OapDataReader(
             // Order limit scan options
             val isAscending = options.getOrElse(
               OapFileFormat.OAP_QUERY_ORDER_OPTION_KEY, "true").toBoolean
-            val sameOrder =
-              !((indexScanners.order == Ascending) ^ isAscending)
+            val sameOrder = !((indexScanners.order == Ascending) ^ isAscending)
 
             if (sameOrder) {
               indexScanners.take(limit).toArray

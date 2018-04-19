@@ -42,6 +42,7 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       lastRowCount <- Gen.choose[Int](1, defaultRowCount)
       fiberLens <- Gen.listOfN(fieldCount, Gen.choose[Int](0, 1048576))
       uncompressedFiberLens <- Gen.listOfN(fieldCount, Gen.choose[Int](0, 1048576))
+      statistics <- Gen.listOfN(fieldCount, arbitrary[ColumnStatistics])
       codec <- Gen.oneOf(CompressionCodec.GZIP,
         CompressionCodec.LZO,
         CompressionCodec.GZIP,
@@ -54,7 +55,8 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       fiberLens.toArray,
       uncompressedFiberLens.toArray,
       columnsMeta,
-      codec)
+      codec,
+      statistics.toArray)
   }
 
   implicit lazy val arbOapDataFileHandle: Arbitrary[OapDataFileHandle] = {
@@ -69,7 +71,8 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       fiberLens: Array[Int],
       uncompressedFiberLens: Array[Int],
       columnsMeta: Seq[ColumnMeta],
-      codec: CompressionCodec): OapDataFileHandle = {
+      codec: CompressionCodec,
+      statistics: Array[ColumnStatistics]): OapDataFileHandle = {
 
     val rowGroupMetaArray = new Array[RowGroupMeta](rowGroupCount)
     rowGroupMetaArray.indices.foreach(
@@ -78,6 +81,7 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
         .withNewEnd(100)
         .withNewFiberLens(fiberLens)
         .withNewUncompressedFiberLens(uncompressedFiberLens)
+        .withNewStatistics(statistics)
     )
 
     val oapDataFileHandle = new OapDataFileHandle(
@@ -102,9 +106,8 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
         Encoding.DELTA_LENGTH_BYTE_ARRAY, Encoding.DELTA_BINARY_PACKED)
       dictionaryDataLength <- Gen.posNum[Int]
       dictionaryIdSize <- Gen.posNum[Int]
-      statistics <- arbitrary[ColumnStatistics]
     } yield {
-      new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize, statistics)
+      new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize)
     }
   }
 
@@ -153,8 +156,7 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
 
     l.encoding == r.encoding &&
       l.dictionaryDataLength == r.dictionaryDataLength &&
-    l.dictionaryIdSize == r.dictionaryIdSize &&
-    isEqual(l.statistics, r.statistics)
+    l.dictionaryIdSize == r.dictionaryIdSize
   }
 
   def isEqual(l: ColumnStatistics, r: ColumnStatistics): Boolean = {

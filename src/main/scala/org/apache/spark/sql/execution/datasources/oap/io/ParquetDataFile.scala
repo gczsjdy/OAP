@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.datasources.oap.filecache.{MemoryManager, 
 import org.apache.spark.sql.execution.datasources.parquet.ParquetReadSupportWrapper
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch
 import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
 
@@ -176,7 +177,7 @@ private[oap] case class ParquetDataFile(
     }
   }
 
-  def iterator(requiredIds: Array[Int]): OapIterator[InternalRow] = {
+  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
     addRequestSchemaToConf(configuration, requiredIds)
     context match {
       case Some(c) =>

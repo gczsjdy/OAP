@@ -192,68 +192,6 @@ private[sql] class OapFileFormat extends FileFormat
           checkAttribute(filter)
         }
 
-        def order(sf: StructField): Ordering[Key] = GenerateOrdering.create(StructType(Array(sf)))
-        def canSkipFile(
-            columnStats: ArrayBuffer[ColumnStatistics],
-            filter: Filter,
-            schema: StructType): Boolean = filter match {
-          case Or(left, right) =>
-            canSkipFile(columnStats, left, schema) && canSkipFile(columnStats, right, schema)
-          case And(left, right) =>
-            canSkipFile(columnStats, left, schema) || canSkipFile(columnStats, right, schema)
-          case IsNotNull(attribute) =>
-            val idx = schema.fieldIndex(attribute)
-            val stat = columnStats(idx)
-            !stat.hasNonNullValue
-          case EqualTo(attribute, handle) =>
-            val key = OapUtils.keyFromAny(handle)
-            val idx = schema.fieldIndex(attribute)
-            val stat = columnStats(idx)
-            val comp = order(schema(idx))
-            (OapUtils.keyFromBytes(stat.min, schema(idx).dataType), OapUtils.keyFromBytes(
-              stat.max, schema(idx).dataType)) match {
-              case (Some(v1), Some(v2)) => comp.gt(v1, key) || comp.lt(v2, key)
-              case _ => false
-            }
-          case LessThan(attribute, handle) =>
-            val key = OapUtils.keyFromAny(handle)
-            val idx = schema.fieldIndex(attribute)
-            val stat = columnStats(idx)
-            val comp = order(schema(idx))
-            OapUtils.keyFromBytes(stat.min, schema(idx).dataType) match {
-              case Some(v) => comp.gteq(v, key)
-              case None => false
-            }
-          case LessThanOrEqual(attribute, handle) =>
-            val key = OapUtils.keyFromAny(handle)
-            val idx = schema.fieldIndex(attribute)
-            val stat = columnStats(idx)
-            val comp = order(schema(idx))
-            OapUtils.keyFromBytes(stat.min, schema(idx).dataType) match {
-              case Some(v) => comp.gt(v, key)
-              case None => false
-            }
-          case GreaterThan(attribute, handle) =>
-            val key = OapUtils.keyFromAny(handle)
-            val idx = schema.fieldIndex(attribute)
-            val stat = columnStats(idx)
-            val comp = order(schema(idx))
-            OapUtils.keyFromBytes(stat.max, schema(idx).dataType) match {
-              case Some(v) => comp.lteq(v, key)
-              case None => false
-            }
-          case GreaterThanOrEqual(attribute, handle) =>
-            val key = OapUtils.keyFromAny(handle)
-            val idx = schema.fieldIndex(attribute)
-            val stat = columnStats(idx)
-            val comp = order(schema(idx))
-            OapUtils.keyFromBytes(stat.max, schema(idx).dataType) match {
-              case Some(v) => comp.lt(v, key)
-              case None => false
-            }
-          case _ => false
-        }
-
         val ic = new IndexContext(m)
 
         if (m.indexMetas.nonEmpty) { // check and use index
@@ -302,55 +240,35 @@ private[sql] class OapFileFormat extends FileFormat
           assert(file.partitionValues.numFields == partitionSchema.size)
           val conf = broadcastedHadoopConf.value.value
 
-          def canSkipByDataFileStatistics: Boolean = {
-            if (m.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
-              val dataFile = DataFile(file.filePath, m.schema, m.dataReaderClassName, conf)
-              val dataFileHandle =
-                DataFileHandleCacheManager(dataFile).asInstanceOf[OapDataFileHandle]
-              if (filters.exists(filter =>
-                canSkipFile(dataFileHandle.columnsMeta.map(_.statistics), filter, m.schema))) {
-                val totalRows = dataFileHandle.totalRowCount()
-                oapMetrics.updateTotalRows(totalRows)
-                oapMetrics.skipForStatistic(totalRows)
-                return true
-              }
-            }
-            false
-          }
-
-          if (canSkipByDataFileStatistics) {
-            Iterator.empty
+          OapIndexInfo.partitionOapIndex.put(file.filePath, false)
+          FilterHelper.setFilterIfExist(conf, pushed)
+          // if enableVectorizedReader == true, init VectorizedContext,
+          // else context is None.
+          val context = if (enableVectorizedReader) {
+            Some(VectorizedContext(partitionSchema,
+              file.partitionValues, returningBatch))
           } else {
-            OapIndexInfo.partitionOapIndex.put(file.filePath, false)
-            FilterHelper.setFilterIfExist(conf, pushed)
-            // if enableVectorizedReader == true, init VectorizedContext,
-            // else context is None.
-            val context = if (enableVectorizedReader) {
-              Some(VectorizedContext(partitionSchema,
-                file.partitionValues, returningBatch))
-            } else {
-              None
-            }
-            val reader = new OapDataReader(
-              new Path(new URI(file.filePath)), m, filterScanners, requiredIds, context)
-            val iter = reader.initialize(conf, options)
-            Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
-            val totalRows = reader.totalRows()
-            oapMetrics.updateTotalRows(totalRows)
-            oapMetrics.updateIndexAndRowRead(reader, totalRows)
-            // if enableVectorizedReader == true and parquetDataCacheEnable = false,
-            // return iter directly because of partitionValues
-            // already filled by VectorizedReader, else use original branch.
-            if (enableVectorizedReader && !parquetDataCacheEnable) {
-              iter
-            } else {
-              val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-              val joinedRow = new JoinedRow()
-              val appendPartitionColumns =
-                GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+            None
+          }
+          val reader = new OapDataReader(
+            new Path(new URI(file.filePath)), m, filterScanners, requiredIds, context)
+          val iter = reader.initialize(conf, options, filters)
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+          val totalRows = reader.totalRows()
+          oapMetrics.updateTotalRows(totalRows)
+          oapMetrics.updateIndexAndRowRead(reader, totalRows)
+          // if enableVectorizedReader == true and parquetDataCacheEnable = false,
+          // return iter directly because of partitionValues
+          // already filled by VectorizedReader, else use original branch.
+          if (enableVectorizedReader && !parquetDataCacheEnable) {
+            iter
+          } else {
+            val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+            val joinedRow = new JoinedRow()
+            val appendPartitionColumns =
+              GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-              iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
-            }
+            iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
           }
         }
       case None => (_: PartitionedFile) => {

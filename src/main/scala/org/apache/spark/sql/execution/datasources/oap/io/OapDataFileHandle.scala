@@ -72,6 +72,7 @@ private[oap] class RowGroupMeta {
   var end: Long = _
   var fiberLens: Array[Int] = _
   var fiberUncompressedLens: Array[Int] = _
+  var statistics: Array[ColumnStatistics] = _
 
   def withNewStart(newStart: Long): RowGroupMeta = {
     this.start = newStart
@@ -93,12 +94,19 @@ private[oap] class RowGroupMeta {
     this
   }
 
+  def withNewStatistics(newStatistics: Array[ColumnStatistics]): RowGroupMeta = {
+    this.statistics = newStatistics
+    this
+  }
+
   def write(os: FSDataOutputStream): RowGroupMeta = {
     os.writeLong(start)
     os.writeLong(end)
     fiberLens.foreach(os.writeInt)
     fiberUncompressedLens.foreach(os.writeInt)
-
+    statistics.foreach {
+      case ColumnStatistics(bytes) => os.write(bytes)
+    }
     this
   }
 
@@ -110,7 +118,8 @@ private[oap] class RowGroupMeta {
 
     fiberLens.indices.foreach(fiberLens(_) = is.readInt())
     fiberUncompressedLens.indices.foreach(fiberUncompressedLens(_) = is.readInt())
-
+    statistics = new Array[ColumnStatistics](fieldCount)
+    statistics.indices.foreach(statistics(_) = ColumnStatistics(is))
     this
   }
 }
@@ -193,8 +202,7 @@ private[oap] object ColumnStatistics {
 private[oap] class ColumnMeta(
     val encoding: Encoding,
     val dictionaryDataLength: Int,
-    val dictionaryIdSize: Int,
-    val statistics: ColumnStatistics) {}
+    val dictionaryIdSize: Int) {}
 
 private[oap] object ColumnMeta {
 
@@ -204,9 +212,7 @@ private[oap] object ColumnMeta {
     val dictionaryDataLength = in.readInt()
     val dictionaryIdSize = in.readInt()
 
-    val statistics = ColumnStatistics(in)
-
-    new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize, statistics)
+    new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize)
   }
 
   def unapply(columnMeta: ColumnMeta): Option[Array[Byte]] = {
@@ -216,10 +222,6 @@ private[oap] object ColumnMeta {
     out.writeInt(columnMeta.encoding.getValue)
     out.writeInt(columnMeta.dictionaryDataLength)
     out.writeInt(columnMeta.dictionaryIdSize)
-
-    columnMeta.statistics match {
-      case ColumnStatistics(bytes) => out.write(bytes)
-    }
 
     Some(buf.toByteArray)
   }
