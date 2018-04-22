@@ -22,18 +22,14 @@ import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.apache.parquet.format.CompressionCodec
 import org.apache.parquet.io.api.Binary
 
-import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SparkListenerOapIndexInfoUpdate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Ascending
 import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
-import org.apache.spark.sql.execution.datasources.oap.filecache.{CacheStats, DataFiberBuilder, FiberCacheManager}
-import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager.status
+import org.apache.spark.sql.execution.datasources.oap.filecache.DataFiberBuilder
 import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.execution.datasources.oap.utils.OapIndexInfoStatusSerDe
-import org.apache.spark.sql.oap.rpc.OapMessages.{FiberCacheHeartbeat, FiberCacheMetricsHeartbeat, IndexHeartbeat}
-import org.apache.spark.sql.oap.rpc.OapRpcManagerSlave
 import org.apache.spark.sql.types._
 import org.apache.spark.util.TimeStampedHashMap
 
@@ -164,7 +160,7 @@ private[oap] class OapDataWriter(
 
 private[oap] case class OapIndexInfoStatus(path: String, useIndex: Boolean)
 
-private[oap] object OapIndexInfo extends Logging {
+private[sql] object OapIndexInfo extends Logging {
   val partitionOapIndex = new TimeStampedHashMap[String, Boolean](updateTimeStampOnGet = true)
 
   def status: String = {
@@ -195,18 +191,6 @@ private[oap] class OapDataReader(
     context: Option[VectorizedContext] = None) extends Logging {
 
   import org.apache.spark.sql.execution.datasources.oap.INDEX_STAT._
-
-  registerHeartbeat()
-
-  private def registerHeartbeat(): Unit = {
-    val sparkEnv = SparkEnv.get
-    val executorId = sparkEnv.executorId
-    val blockManagerId = sparkEnv.blockManager.blockManagerId
-    val conf = sparkEnv.conf
-    val indexHeartbeat = () => IndexHeartbeat(executorId, blockManagerId, OapIndexInfo.status)
-
-    sparkEnv.oapRpcManager.asInstanceOf[OapRpcManagerSlave].registerHeartbeat(Seq(indexHeartbeat))
-  }
 
   private var _rowsReadWhenHitIndex: Option[Long] = None
   private var _indexStat = MISS_INDEX

@@ -88,21 +88,20 @@ class FiberSensorSuite extends QueryTest with SharedOapContext
       }
     }
 
-    FiberCacheManager.registerHeartbeat()
-
     // Only one executor in local-mode, each data file has 4 dataFiber(2 cols * 2 rgs/col)
     // wait for a heartbeat
     Thread.sleep(20 * 1000)
     val summary = FiberCacheManagerSensor.summary()
     logWarning(s"Summary1: ${summary.toDebugString}")
-    assertResult(1)(FiberCacheManagerSensor.executorToCacheManager.size())
-    assertResult(dataFileCount * 4)(summary.dataFiberCount)
 
     // all data are cached when run another sql.
     // Expect: 1.hitCount increase; 2.missCount equal
     // wait for a heartbeat period
     checkAnswer(sql("SELECT * FROM oap_test WHERE a > 200 AND a < 2400"),
       data.filter(r => r._1 > 200 && r._1 < 2400).map(r => Row(r._1, r._2)))
+    assertResult(1)(FiberCacheManagerSensor.executorToCacheManager.size())
+    assertResult(dataFileCount * 4)(summary.dataFiberCount)
+
     CacheStats.reset
     Thread.sleep(15 * 1000)
     val summary2 = FiberCacheManagerSensor.summary()

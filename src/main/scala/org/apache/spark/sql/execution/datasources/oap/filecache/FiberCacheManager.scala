@@ -24,13 +24,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import com.google.common.cache._
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.io._
 import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
-import org.apache.spark.sql.oap.rpc.OapMessages.{FiberCacheHeartbeat, FiberCacheMetricsHeartbeat}
-import org.apache.spark.sql.oap.rpc.OapRpcManagerSlave
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -92,21 +90,6 @@ object FiberCacheManager extends Logging {
   private val SIMPLE_CACHE = "simple"
   private val DEFAULT_CACHE_STRATEGY = GUAVA_CACHE
 
-  registerHeartbeat()
-
-  private[spark] def registerHeartbeat(): Unit = {
-    val sparkEnv = SparkEnv.get
-    val executorId = sparkEnv.executorId
-    val blockManagerId = sparkEnv.blockManager.blockManagerId
-    val conf = sparkEnv.conf
-    val fiberCacheHeartbeat = () => FiberCacheHeartbeat(executorId, blockManagerId, status())
-    val fiberCacheMetricsHeartbeat = () => FiberCacheMetricsHeartbeat(executorId, blockManagerId,
-      CacheStats.status(FiberCacheManager.cacheStats, conf))
-
-    sparkEnv.oapRpcManager.asInstanceOf[OapRpcManagerSlave]
-      .registerHeartbeat(Seq(fiberCacheHeartbeat, fiberCacheMetricsHeartbeat))
-  }
-
   private val cacheBackend: OapCache = {
     val sparkEnv = SparkEnv.get
     assert(sparkEnv != null, "Oap can't run without SparkContext")
@@ -150,7 +133,7 @@ object FiberCacheManager extends Logging {
   private[filecache] def clearAllFibers(): Unit = cacheBackend.cleanUp
 
   // TODO: test case, consider data eviction, try not use DataFileHandle which my be costly
-  private[filecache] def status(): String = {
+  private[sql] def status(): String = {
     logDebug(s"Reporting ${cacheBackend.cacheCount} fibers to the master")
     val dataFibers = cacheBackend.getFibers.collect {
       case fiber: DataFiber => fiber
