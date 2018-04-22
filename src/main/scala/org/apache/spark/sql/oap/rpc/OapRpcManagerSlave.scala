@@ -19,14 +19,13 @@ package org.apache.spark.sql.oap.rpc
 
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheManager
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.rpc.OapMessages._
+import org.apache.spark.storage.BlockManager
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 
@@ -37,6 +36,7 @@ private[spark] class OapRpcManagerSlave(
     rpcEnv: RpcEnv,
     val driverEndpoint: RpcEndpointRef,
     executorId: String,
+    blockManager: BlockManager,
     conf: SparkConf)
   extends OapRpcManager {
 
@@ -44,9 +44,7 @@ private[spark] class OapRpcManagerSlave(
   private val oapHeartbeater =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
 
-  private val oapHeartbeatMaterials = mutable.HashSet.empty[() => Heartbeat]
-
-  private def getHeartbeatMaterials = oapHeartbeatMaterials
+  private val oapHeartbeatMaterials = new OapHeartbeatMaterials(executorId, blockManager, conf).get
 
   private val slaveEndpoint = rpcEnv.setupEndpoint(
     s"OapRpcManagerSlave_$executorId", new OapRpcManagerSlaveEndpoint(rpcEnv))
@@ -64,10 +62,7 @@ private[spark] class OapRpcManagerSlave(
   private def startOapHeartbeater(): Unit = {
 
     def reportHeartbeat(): Unit = {
-      // When the object is just initialized, this is empty, elements add to it after
-      // registerHeartbeat is called
-      val getMaterials = getHeartbeatMaterials.toSeq
-      val materials = getMaterials.map(_.apply())
+      val materials = oapHeartbeatMaterials.map(_.apply())
       materials.foreach(send)
     }
 

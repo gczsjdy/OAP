@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.oap.rpc
 
-import org.mockito.Mockito.{spy, verify}
+import org.mockito.Mockito._
 import org.mockito.internal.verification.AtLeast
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 
@@ -25,6 +25,7 @@ import org.apache.spark._
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.rpc.OapMessages.{DummyHeartbeat, DummyMessage, Heartbeat, RegisterOapRpcManager}
+import org.apache.spark.storage.{BlockManager, BlockManagerId}
 
 
 class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with PrivateMethodTester
@@ -98,8 +99,6 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
   test("Send heartbeat message from Executor to Driver") {
     val rpcManagerSlave1 = addRpcManagerSlave(executorId1)
 
-    rpcManagerSlave1.registerHeartbeat(Seq(() => heartbeat))
-
     // Initial delay is at most 2 * interval
     Thread.sleep(2000 + 2 * sc.conf.getTimeAsMs(
       OapConf.OAP_HEARTBEAT_INTERVAL.key, OapConf.OAP_HEARTBEAT_INTERVAL.defaultValue.get))
@@ -116,7 +115,11 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
 
   // This doesn't need to be spied due to it's used to send messages
   private def addRpcManagerSlave(executorId: String): OapRpcManagerSlave = {
-    new OapRpcManagerSlave(rpcEnv, rpcDriverEndpoint, executorId, sc.conf)
+    val blockManager = mock(classOf[BlockManager])
+    val myBlockManagerId = mock(classOf[BlockManagerId])
+    when(myBlockManagerId.host).thenReturn(executorId)
+    when(blockManager.blockManagerId).thenReturn(myBlockManagerId)
+    new OapRpcManagerSlave(rpcEnv, rpcDriverEndpoint, executorId, blockManager, sc.conf)
   }
 
 }
