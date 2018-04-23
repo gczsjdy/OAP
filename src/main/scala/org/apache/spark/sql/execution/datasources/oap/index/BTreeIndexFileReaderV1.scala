@@ -85,10 +85,6 @@ private[oap] case class BTreeIndexFileReaderV1(
       readLength.toInt)
   }
 
-  @deprecated("no need to read the whole row id list", "v0.3")
-  def readRowIdList(): FiberCache =
-    MemoryManager.toIndexFiberCache(reader, rowIdListIndex, rowIdListLength.toInt)
-
   def readNode(offset: Int, size: Int): FiberCache =
     MemoryManager.toIndexFiberCache(reader, nodesIndex + offset, size)
 
