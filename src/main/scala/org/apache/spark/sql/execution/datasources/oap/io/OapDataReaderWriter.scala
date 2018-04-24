@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.apache.parquet.format.CompressionCodec
 import org.apache.parquet.io.api.Binary
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SparkListenerOapIndexInfoUpdate
 import org.apache.spark.sql.catalyst.InternalRow
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFo
 import org.apache.spark.sql.execution.datasources.oap.filecache.DataFiberBuilder
 import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.execution.datasources.oap.utils.OapIndexInfoStatusSerDe
+import org.apache.spark.sql.oap.rpc.OapRpcManagerSlave
 import org.apache.spark.sql.types._
 import org.apache.spark.util.TimeStampedHashMap
 
@@ -189,6 +191,8 @@ private[oap] class OapDataReader(
     filterScanners: Option[IndexScanners],
     requiredIds: Array[Int],
     context: Option[VectorizedContext] = None) extends Logging {
+
+  SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].startOapHeartbeater
 
   import org.apache.spark.sql.execution.datasources.oap.INDEX_STAT._
 

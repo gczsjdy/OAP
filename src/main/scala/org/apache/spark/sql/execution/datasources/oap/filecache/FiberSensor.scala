@@ -101,10 +101,20 @@ object FiberCacheManagerSensor extends AbstractFiberSensor {
     .foldLeft(CacheStats())((sum, cache) => sum + cache)
 
   override def update(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
+    // scalastyle:off println
+    println("In update")
     if (fiberInfo.customizedInfo.nonEmpty) {
+      println("None empty")
       try {
+        println("here")
+        println("Info: " + fiberInfo.customizedInfo)
         val cacheMetrics = CacheStats(fiberInfo.customizedInfo)
+        println("put")
+
         executorToCacheManager.put(fiberInfo.executorId, cacheMetrics)
+        println("size: " + executorToCacheManager.size())
+
+        // scalastyle:on println
         logDebug(s"execID:${fiberInfo.executorId}, host:${fiberInfo.hostName}," +
           s" ${cacheMetrics.toDebugString}")
       } catch {

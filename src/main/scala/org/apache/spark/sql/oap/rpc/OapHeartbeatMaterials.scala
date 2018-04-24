@@ -22,13 +22,17 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.datasources.oap.filecache.{CacheStats, FiberCacheManager}
 import org.apache.spark.sql.execution.datasources.oap.io.OapIndexInfo
-import org.apache.spark.sql.oap.rpc.OapMessages.{FiberCacheHeartbeat, FiberCacheMetricsHeartbeat, Heartbeat, IndexHeartbeat}
+import org.apache.spark.sql.oap.rpc.OapMessages._
 import org.apache.spark.storage.BlockManager
+
+trait OapHeartbeatMaterialsInterface {
+  def get: HashSet[() => Heartbeat]
+}
 
 private[rpc] class OapHeartbeatMaterials(
     executorId: String,
     blockManager: BlockManager,
-    conf: SparkConf) {
+    conf: SparkConf) extends OapHeartbeatMaterialsInterface {
 
   val blockManagerId = blockManager.blockManagerId
 

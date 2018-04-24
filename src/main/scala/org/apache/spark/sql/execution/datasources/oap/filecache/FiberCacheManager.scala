@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.io._
 import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
+import org.apache.spark.sql.oap.rpc.OapRpcManagerSlave
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -85,6 +86,8 @@ private[filecache] class CacheGuardian(maxMemory: Long)
 }
 
 object FiberCacheManager extends Logging {
+
+  SparkEnv.get.oapRpcManager.asInstanceOf[OapRpcManagerSlave].startOapHeartbeater
 
   private val GUAVA_CACHE = "guava"
   private val SIMPLE_CACHE = "simple"

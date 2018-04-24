@@ -25,6 +25,9 @@ class FiberInfoListener extends SparkListener {
     if (fiberInfo.clazzName.contains("OapFiberCacheHeartBeatMessager")) {
       FiberSensor.update(fiberInfo)
     } else if (fiberInfo.clazzName.contains("FiberCacheManagerMessager")) {
+      // scalastyle:off println
+      println("Updated")
+      // scalastyle:on println
       FiberCacheManagerSensor.update(fiberInfo)
     }
   }
