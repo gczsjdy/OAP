@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.oap.rpc
 
-import org.mockito.Mockito._
-import org.mockito.internal.verification.AtLeast
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
-
 import org.apache.spark._
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.rpc.OapMessages.{DummyHeartbeat, DummyMessage, Heartbeat, RegisterOapRpcManager}
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
+import org.mockito.Mockito._
+import org.mockito.internal.verification.AtLeast
+import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+
+import scala.collection.immutable.HashSet
+
 
 
 class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with PrivateMethodTester
@@ -97,7 +99,10 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
   }
 
   test("Send heartbeat message from Executor to Driver") {
+
     val rpcManagerSlave1 = addRpcManagerSlave(executorId1)
+
+    rpcManagerSlave1.startOapHeartbeater()
 
     // Initial delay is at most 2 * interval
     Thread.sleep(2000 + 2 * sc.conf.getTimeAsMs(
@@ -115,11 +120,10 @@ class OapRpcManagerSuite extends SparkFunSuite with BeforeAndAfterEach with Priv
 
   // This doesn't need to be spied due to it's used to send messages
   private def addRpcManagerSlave(executorId: String): OapRpcManagerSlave = {
-    val blockManager = mock(classOf[BlockManager])
-    val myBlockManagerId = mock(classOf[BlockManagerId])
-    when(myBlockManagerId.host).thenReturn(executorId)
-    when(blockManager.blockManagerId).thenReturn(myBlockManagerId)
-    new OapRpcManagerSlave(rpcEnv, rpcDriverEndpoint, executorId, blockManager, sc.conf)
+    class TestDummyHeartbeatMaterials extends OapHeartbeatMaterialsInterface{
+      override def get: HashSet[() => Heartbeat] = HashSet[() => Heartbeat] (() => heartbeat)
+    }
+    new OapRpcManagerSlave(
+      rpcEnv, rpcDriverEndpoint, executorId, null, sc.conf, Some(new TestDummyHeartbeatMaterials))
   }
-
 }
