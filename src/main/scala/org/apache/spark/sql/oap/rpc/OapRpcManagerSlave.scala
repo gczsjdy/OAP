@@ -87,10 +87,6 @@ private[spark] class OapRpcManagerSlave(
     }
   }
 
-  private[spark] def registerHearbeat(getMaterials: Seq[() => Heartbeat]): Unit = {
-    getMaterials.foreach(oapHeartbeatMaterials += _)
-  }
-
   override private[spark] def stop(): Unit = {
     oapHeartbeater.shutdown()
   }
