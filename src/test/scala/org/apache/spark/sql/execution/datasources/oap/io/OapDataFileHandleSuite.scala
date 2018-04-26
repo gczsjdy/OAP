@@ -42,12 +42,12 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       lastRowCount <- Gen.choose[Int](1, defaultRowCount)
       fiberLens <- Gen.listOfN(fieldCount, Gen.choose[Int](0, 1048576))
       uncompressedFiberLens <- Gen.listOfN(fieldCount, Gen.choose[Int](0, 1048576))
-      statistics <- Gen.listOfN(fieldCount, arbitrary[ColumnStatistics])
       codec <- Gen.oneOf(CompressionCodec.GZIP,
         CompressionCodec.LZO,
         CompressionCodec.GZIP,
         CompressionCodec.UNCOMPRESSED)
       columnsMeta <- Gen.listOfN(fieldCount, arbitrary[ColumnMeta])
+      rowGroupStatistics <- Gen.listOfN(fieldCount, arbitrary[ColumnStatistics])
     } yield generateOapDataFileHandle(rowGroupCount,
       defaultRowCount,
       fieldCount,
@@ -56,7 +56,7 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       uncompressedFiberLens.toArray,
       columnsMeta,
       codec,
-      statistics.toArray)
+      rowGroupStatistics.toArray)
   }
 
   implicit lazy val arbOapDataFileHandle: Arbitrary[OapDataFileHandle] = {
@@ -72,7 +72,7 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       uncompressedFiberLens: Array[Int],
       columnsMeta: Seq[ColumnMeta],
       codec: CompressionCodec,
-      statistics: Array[ColumnStatistics]): OapDataFileHandle = {
+      rowGroupStatistics: Array[ColumnStatistics]): OapDataFileHandle = {
 
     val rowGroupMetaArray = new Array[RowGroupMeta](rowGroupCount)
     rowGroupMetaArray.indices.foreach(
@@ -81,7 +81,7 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
         .withNewEnd(100)
         .withNewFiberLens(fiberLens)
         .withNewUncompressedFiberLens(uncompressedFiberLens)
-        .withNewStatistics(statistics)
+        .withNewStatistics(rowGroupStatistics)
     )
 
     val oapDataFileHandle = new OapDataFileHandle(
@@ -106,8 +106,9 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
         Encoding.DELTA_LENGTH_BYTE_ARRAY, Encoding.DELTA_BINARY_PACKED)
       dictionaryDataLength <- Gen.posNum[Int]
       dictionaryIdSize <- Gen.posNum[Int]
+      statistics <- arbitrary[ColumnStatistics]
     } yield {
-      new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize)
+      new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize, statistics)
     }
   }
 
@@ -156,7 +157,8 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
 
     l.encoding == r.encoding &&
       l.dictionaryDataLength == r.dictionaryDataLength &&
-    l.dictionaryIdSize == r.dictionaryIdSize
+    l.dictionaryIdSize == r.dictionaryIdSize &&
+    isEqual(l.fileStatistics, r.fileStatistics)
   }
 
   def isEqual(l: ColumnStatistics, r: ColumnStatistics): Boolean = {

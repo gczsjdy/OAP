@@ -202,7 +202,8 @@ private[oap] object ColumnStatistics {
 private[oap] class ColumnMeta(
     val encoding: Encoding,
     val dictionaryDataLength: Int,
-    val dictionaryIdSize: Int) {}
+    val dictionaryIdSize: Int,
+    val fileStatistics: ColumnStatistics) {}
 
 private[oap] object ColumnMeta {
 
@@ -212,7 +213,9 @@ private[oap] object ColumnMeta {
     val dictionaryDataLength = in.readInt()
     val dictionaryIdSize = in.readInt()
 
-    new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize)
+    val fileStatistics = ColumnStatistics(in)
+
+    new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize, fileStatistics)
   }
 
   def unapply(columnMeta: ColumnMeta): Option[Array[Byte]] = {
@@ -222,6 +225,10 @@ private[oap] object ColumnMeta {
     out.writeInt(columnMeta.encoding.getValue)
     out.writeInt(columnMeta.dictionaryDataLength)
     out.writeInt(columnMeta.dictionaryIdSize)
+
+    columnMeta.fileStatistics match {
+      case ColumnStatistics(bytes) => out.write(bytes)
+    }
 
     Some(buf.toByteArray)
   }

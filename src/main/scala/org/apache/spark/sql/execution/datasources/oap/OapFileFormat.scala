@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.datasources.oap
 
 import java.net.URI
 
-import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -240,35 +237,55 @@ private[sql] class OapFileFormat extends FileFormat
           assert(file.partitionValues.numFields == partitionSchema.size)
           val conf = broadcastedHadoopConf.value.value
 
-          OapIndexInfo.partitionOapIndex.put(file.filePath, false)
-          FilterHelper.setFilterIfExist(conf, pushed)
-          // if enableVectorizedReader == true, init VectorizedContext,
-          // else context is None.
-          val context = if (enableVectorizedReader) {
-            Some(VectorizedContext(partitionSchema,
-              file.partitionValues, returningBatch))
-          } else {
-            None
+          def isSkippedByFile: Boolean = {
+            if (m.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
+              val dataFile = DataFile(file.filePath, m.schema, m.dataReaderClassName, conf)
+              val dataFileHandle = DataFileHandleCacheManager(dataFile)
+                  .asInstanceOf[OapDataFileHandle]
+              if (filters.exists(filter => isSkippedByStatistics(
+                  dataFileHandle.columnsMeta.map(_.fileStatistics).toArray, filter, m.schema))) {
+                val totalRows = dataFileHandle.totalRowCount()
+                oapMetrics.updateTotalRows(totalRows)
+                oapMetrics.skipForStatistic(totalRows)
+                return true
+              }
+            }
+            false
           }
-          val reader = new OapDataReader(
-            new Path(new URI(file.filePath)), m, filterScanners, requiredIds, context)
-          val iter = reader.initialize(conf, options, filters)
-          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
-          val totalRows = reader.totalRows()
-          oapMetrics.updateTotalRows(totalRows)
-          oapMetrics.updateIndexAndRowRead(reader, totalRows)
-          // if enableVectorizedReader == true and parquetDataCacheEnable = false,
-          // return iter directly because of partitionValues
-          // already filled by VectorizedReader, else use original branch.
-          if (enableVectorizedReader && !parquetDataCacheEnable) {
-            iter
-          } else {
-            val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-            val joinedRow = new JoinedRow()
-            val appendPartitionColumns =
-              GenerateUnsafeProjection.generate(fullSchema, fullSchema)
 
-            iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+          if (isSkippedByFile) {
+            Iterator.empty
+          } else {
+            OapIndexInfo.partitionOapIndex.put(file.filePath, false)
+            FilterHelper.setFilterIfExist(conf, pushed)
+            // if enableVectorizedReader == true, init VectorizedContext,
+            // else context is None.
+            val context = if (enableVectorizedReader) {
+              Some(VectorizedContext(partitionSchema,
+                file.partitionValues, returningBatch))
+            } else {
+              None
+            }
+            val reader = new OapDataReader(
+              new Path(new URI(file.filePath)), m, filterScanners, requiredIds, context)
+            val iter = reader.initialize(conf, options, filters)
+            Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+            val totalRows = reader.totalRows()
+            oapMetrics.updateTotalRows(totalRows)
+            oapMetrics.updateIndexAndRowRead(reader, totalRows)
+            // if enableVectorizedReader == true and parquetDataCacheEnable = false,
+            // return iter directly because of partitionValues
+            // already filled by VectorizedReader, else use original branch.
+            if (enableVectorizedReader && !parquetDataCacheEnable) {
+              iter
+            } else {
+              val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+              val joinedRow = new JoinedRow()
+              val appendPartitionColumns =
+                GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+              iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+            }
           }
         }
       case None => (_: PartitionedFile) => {

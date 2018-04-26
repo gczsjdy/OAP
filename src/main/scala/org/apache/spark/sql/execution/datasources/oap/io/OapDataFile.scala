@@ -26,10 +26,8 @@ import org.apache.parquet.column.page.DictionaryPage
 import org.apache.parquet.column.values.dictionary.PlainValuesDictionary.{PlainBinaryDictionary, PlainIntegerDictionary}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.filecache._
-import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
@@ -44,75 +42,9 @@ private[oap] case class OapDataFile(
   private val codecFactory = new CodecFactory(configuration)
   private val meta = DataFileHandleCacheManager(this).asInstanceOf[OapDataFileHandle]
 
-  def order(sf: StructField): Ordering[Key] = GenerateOrdering.create(StructType(Array(sf)))
-
-  def canSkipRowGroup(
-      columnStats: Array[ColumnStatistics],
-      filter: Filter,
-      schema: StructType): Boolean = filter match {
-    case Or(left, right) =>
-      canSkipRowGroup(columnStats, left, schema) &&
-          canSkipRowGroup(columnStats, right, schema)
-    case And(left, right) =>
-      canSkipRowGroup(columnStats, left, schema) ||
-          canSkipRowGroup(columnStats, right, schema)
-    case IsNotNull(attribute) =>
-      val idx = schema.fieldIndex(attribute)
-      val stat = columnStats(idx)
-      !stat.hasNonNullValue
-    case EqualTo(attribute, handle) =>
-      val key = OapUtils.keyFromAny(handle)
-      val idx = schema.fieldIndex(attribute)
-      val stat = columnStats(idx)
-      val comp = order(schema(idx))
-      (OapUtils.keyFromBytes(stat.min, schema(idx).dataType), OapUtils.keyFromBytes(
-        stat.max, schema(idx).dataType)) match {
-        case (Some(v1), Some(v2)) => comp.gt(v1, key) || comp.lt(v2, key)
-        case _ => false
-      }
-    case LessThan(attribute, handle) =>
-      val key = OapUtils.keyFromAny(handle)
-      val idx = schema.fieldIndex(attribute)
-      val stat = columnStats(idx)
-      val comp = order(schema(idx))
-      OapUtils.keyFromBytes(stat.min, schema(idx).dataType) match {
-        case Some(v) => comp.gteq(v, key)
-        case None => false
-      }
-    case LessThanOrEqual(attribute, handle) =>
-      val key = OapUtils.keyFromAny(handle)
-      val idx = schema.fieldIndex(attribute)
-      val stat = columnStats(idx)
-      val comp = order(schema(idx))
-      OapUtils.keyFromBytes(stat.min, schema(idx).dataType) match {
-        case Some(v) => comp.gt(v, key)
-        case None => false
-      }
-    case GreaterThan(attribute, handle) =>
-      val key = OapUtils.keyFromAny(handle)
-      val idx = schema.fieldIndex(attribute)
-      val stat = columnStats(idx)
-      val comp = order(schema(idx))
-      OapUtils.keyFromBytes(stat.max, schema(idx).dataType) match {
-        case Some(v) => comp.lteq(v, key)
-        case None => false
-      }
-    case GreaterThanOrEqual(attribute, handle) =>
-      val key = OapUtils.keyFromAny(handle)
-      val idx = schema.fieldIndex(attribute)
-      val stat = columnStats(idx)
-      val comp = order(schema(idx))
-      OapUtils.keyFromBytes(stat.max, schema(idx).dataType) match {
-        case Some(v) => comp.lt(v, key)
-        case None => false
-      }
-    case _ => false
-  }
-
-  def skipByRowGroupStatistics(filters: Seq[Filter] = Nil, rowGroupId: Int): Boolean
-    = {
+  def isSkippedByRowGroup(filters: Seq[Filter] = Nil, rowGroupId: Int): Boolean = {
     if (filters.exists(filter =>
-      canSkipRowGroup(meta.rowGroupsMeta(rowGroupId).statistics, filter, schema))) {
+      isSkippedByStatistics(meta.rowGroupsMeta(rowGroupId).statistics, filter, schema))) {
       true
     } else {
       false
@@ -201,7 +133,7 @@ private[oap] case class OapDataFile(
     val groupIdToRowIds = rowIds.map(_.groupBy(rowId => rowId / meta.rowCountInEachGroup))
     val groupIds = groupIdToRowIds.map(_.keys).getOrElse(0 until meta.groupCount)
     var fiberCacheGroup: Array[WrappedFiberCache] = null
-    val iterator = groupIds.iterator.filterNot(skipByRowGroupStatistics(filters, _)).flatMap {
+    val iterator = groupIds.iterator.filterNot(isSkippedByRowGroup(filters, _)).flatMap {
       groupId =>
         fiberCacheGroup = requiredIds.map { id =>
           WrappedFiberCache(FiberCacheManager.get(DataFiber(this, id, groupId), conf))
