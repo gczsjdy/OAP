@@ -23,7 +23,6 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -31,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.oap.{OapFileFormat, OapMetricsManager$}
+import org.apache.spark.sql.execution.datasources.oap.{OapFileFormat, OapMetricsManager}
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberSensor
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
