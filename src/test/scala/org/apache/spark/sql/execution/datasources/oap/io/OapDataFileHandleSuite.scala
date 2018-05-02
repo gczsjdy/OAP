@@ -148,11 +148,11 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       l.codec == r.codec &&
       l.rowGroupsMeta.length == r.rowGroupsMeta.length &&
       l.columnsMeta.length == r.columnsMeta.length &&
-      !l.columnsMeta.zip(r.columnsMeta).exists{
-        case (left, right) => !isEqual(left, right)
+      l.columnsMeta.zip(r.columnsMeta).forall {
+        case (left, right) => isEqual(left, right)
       } &&
-      !l.rowGroupsMeta.zip(r.rowGroupsMeta).exists{
-        case (left, right) => !isEqual(left, right)
+      l.rowGroupsMeta.zip(r.rowGroupsMeta).forall {
+        case (left, right) => isEqual(left, right)
       }
   }
 
