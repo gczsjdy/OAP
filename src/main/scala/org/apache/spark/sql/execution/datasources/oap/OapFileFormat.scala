@@ -50,7 +50,7 @@ private[sql] class OapFileFormat extends FileFormat
   with Logging
   with Serializable {
 
-  val oapMetrics = new OapMetrics
+  val oapMetrics = new OapMetricsManager
 
   override def initialize(
       sparkSession: SparkSession,
