@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.oap
 
 import java.net.URI
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
@@ -28,7 +27,7 @@ import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.parquet.hadoop.util.SerializationUtil
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -50,7 +49,7 @@ private[sql] class OapFileFormat extends FileFormat
   with Logging
   with Serializable {
 
-  val oapMetrics = new OapMetricsManager
+  val oapMetrics = SparkEnv.get.oapManager.metricsManager
 
   override def initialize(
       sparkSession: SparkSession,
