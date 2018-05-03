@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.scheduler.{SparkListenerCustomInfoUpdate, SparkListenerOapIndexInfoUpdate}
+import org.apache.spark.sql.oap.listener.{SparkListenerCustomInfoUpdate, SparkListenerOapIndexInfoUpdate}
 import org.apache.spark.sql.oap.rpc.OapMessages._
 
 /**
@@ -39,8 +39,9 @@ private[spark] class OapRpcManagerMaster(oapRpcManagerMasterEndpoint: OapRpcMana
     }
   }
 
-  override private[spark] def send(message: OapMessage): Unit =
+  override private[spark] def send(message: OapMessage): Unit = {
     sendOneWayMessageToExecutors(message)
+  }
 }
 
 private[spark] object OapRpcManagerMaster {
