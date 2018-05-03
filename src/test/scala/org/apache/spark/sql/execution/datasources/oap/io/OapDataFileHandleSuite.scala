@@ -133,7 +133,10 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
   private def isEqual(l: RowGroupMeta, r: RowGroupMeta): Boolean = {
     l.start == r.start && l.end == r.end &&
       (l.fiberLens sameElements r.fiberLens) &&
-      (l.fiberUncompressedLens sameElements r.fiberUncompressedLens)
+      (l.fiberUncompressedLens sameElements r.fiberUncompressedLens) &&
+      l.statistics.zip(r.statistics).forall {
+      case (left, right) => isEqual(left, right)
+      }
   }
 
   private def isEqual(l: OapDataFileHandle, r: OapDataFileHandle): Boolean = {
@@ -145,11 +148,11 @@ class OapDataFileHandleCheck extends Properties("OapDataFileHandle") {
       l.codec == r.codec &&
       l.rowGroupsMeta.length == r.rowGroupsMeta.length &&
       l.columnsMeta.length == r.columnsMeta.length &&
-      !l.columnsMeta.zip(r.columnsMeta).exists{
-        case (left, right) => !isEqual(left, right)
+      l.columnsMeta.zip(r.columnsMeta).forall {
+        case (left, right) => isEqual(left, right)
       } &&
-      !l.rowGroupsMeta.zip(r.rowGroupsMeta).exists{
-        case (left, right) => !isEqual(left, right)
+      l.rowGroupsMeta.zip(r.rowGroupsMeta).forall {
+        case (left, right) => isEqual(left, right)
       }
   }
 
