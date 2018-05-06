@@ -208,9 +208,10 @@ private[oap] case class ParquetDataFile(
     }
   }
 
-  def iterator(
+  def iteratorWithRowIds(
       requiredIds: Array[Int],
-      rowIds: Array[Int]): OapIterator[InternalRow] = {
+      rowIds: Array[Int],
+      filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
     if (rowIds == null || rowIds.length == 0) {
       new OapIterator(Iterator.empty)
     } else {

@@ -218,7 +218,7 @@ private[oap] class OapDataReader(
 
     def fullScan: OapIterator[InternalRow] = {
       val start = if (log.isDebugEnabled) System.currentTimeMillis else 0
-      val iter = fileScanner.iterator(requiredIds)
+      val iter = fileScanner.iterator(requiredIds, filters)
       val end = if (log.isDebugEnabled) System.currentTimeMillis else 0
 
       _totalRows = fileScanner.totalRows()
@@ -262,7 +262,7 @@ private[oap] class OapDataReader(
 
         val start = if (log.isDebugEnabled) System.currentTimeMillis else 0
         val rows = getRowIds(options)
-        val iter = fileScanner.iterator(requiredIds, rows)
+        val iter = fileScanner.iteratorWithRowIds(requiredIds, rows, filters)
         val end = if (log.isDebugEnabled) System.currentTimeMillis else 0
 
         _indexStat = HIT_INDEX
