@@ -26,10 +26,12 @@ import org.apache.parquet.column.page.DictionaryPage
 import org.apache.parquet.column.values.dictionary.PlainValuesDictionary.{PlainBinaryDictionary, PlainIntegerDictionary}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.datasources.oap.{BatchColumn, ColumnValues}
+import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.filecache._
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.CompletionIterator
+
 
 private[oap] case class OapDataFile(
     path: String,
@@ -39,6 +41,29 @@ private[oap] case class OapDataFile(
   private val dictionaries = new Array[Dictionary](schema.length)
   private val codecFactory = new CodecFactory(configuration)
   private val meta = DataFileHandleCacheManager(this).asInstanceOf[OapDataFileHandle]
+
+  def isSkippedByRowGroup(filters: Seq[Filter] = Nil, rowGroupId: Int): Boolean = {
+    if (filters.exists(filter =>
+      isSkippedByStatistics(meta.rowGroupsMeta(rowGroupId).statistics, filter, schema))) {
+      true
+    } else {
+      false
+    }
+  }
+
+  private val inUseFiberCache = new Array[FiberCache](schema.length)
+
+  private def release(idx: Int): Unit = synchronized {
+    Option(inUseFiberCache(idx)).foreach { fiberCache =>
+      fiberCache.release()
+      inUseFiberCache.update(idx, null)
+    }
+  }
+
+  private def update(idx: Int, fiberCache: FiberCache): Unit = {
+    release(idx)
+    inUseFiberCache.update(idx, fiberCache)
+  }
 
   def getDictionary(fiberId: Int): Dictionary = {
     val lastGroupMeta = meta.rowGroupsMeta(meta.groupCount - 1)
@@ -116,55 +141,61 @@ private[oap] case class OapDataFile(
   private def buildIterator(
       conf: Configuration,
       requiredIds: Array[Int],
-      rowIds: Option[Array[Int]]): OapIterator[InternalRow] = {
+      rowIds: Option[Array[Int]],
+      filters: Seq[Filter]): OapIterator[InternalRow] = {
     val rows = new BatchColumn()
     val groupIdToRowIds = rowIds.map(_.groupBy(rowId => rowId / meta.rowCountInEachGroup))
     val groupIds = groupIdToRowIds.map(_.keys).getOrElse(0 until meta.groupCount)
-    var fiberCacheGroup: Array[WrappedFiberCache] = null
-    val iterator = groupIds.iterator.flatMap { groupId =>
-      fiberCacheGroup = requiredIds.map { id =>
-        WrappedFiberCache(FiberCacheManager.get(DataFiber(this, id, groupId), conf))
-      }
 
-      val columns = fiberCacheGroup.zip(requiredIds).map { case (fiberCache, id) =>
-        new ColumnValues(meta.rowCountInEachGroup, schema(id).dataType, fiberCache.fc)
-      }
+    val groupIdsNonSkipped = if (filters.isEmpty) {
+      groupIds.iterator
+    } else {
+      groupIds.iterator.filterNot(isSkippedByRowGroup(filters, _))
+    }
 
-      val rowCount =
-        if (groupId < meta.groupCount - 1) meta.rowCountInEachGroup else meta.rowCountInLastGroup
-      rows.reset(rowCount, columns)
-
-      val iter = groupIdToRowIds match {
-        case Some(map) =>
-          map(groupId).iterator.map(rowId => rows.moveToRow(rowId % meta.rowCountInEachGroup))
-        case None => rows.toIterator
-      }
-
-      CompletionIterator[InternalRow, Iterator[InternalRow]](iter,
-        fiberCacheGroup.zip(requiredIds).foreach {
-          case (fiberCache, id) => fiberCache.release()
+    val iterator = groupIdsNonSkipped.flatMap {
+      groupId =>
+        val fiberCacheGroup = requiredIds.map { id =>
+          val fiberCache = FiberCacheManager.get(DataFiber(this, id, groupId), conf)
+          update(id, fiberCache)
+          fiberCache
         }
-      )
+
+        val columns = fiberCacheGroup.zip(requiredIds).map { case (fiberCache, id) =>
+          new ColumnValues(meta.rowCountInEachGroup, schema(id).dataType, fiberCache)
+        }
+
+        val rowCount =
+          if (groupId < meta.groupCount - 1) meta.rowCountInEachGroup else meta.rowCountInLastGroup
+        rows.reset(rowCount, columns)
+
+        val iter = groupIdToRowIds match {
+          case Some(map) =>
+            map(groupId).iterator.map(rowId => rows.moveToRow(rowId % meta.rowCountInEachGroup))
+          case None => rows.toIterator
+        }
+        CompletionIterator[InternalRow, Iterator[InternalRow]](iter, requiredIds.foreach(release))
     }
     new OapIterator[InternalRow](iterator) {
       override def close(): Unit = {
         // To ensure if any exception happens, caches are still released after calling close()
-        if (fiberCacheGroup != null) fiberCacheGroup.foreach(_.release())
+        inUseFiberCache.indices.foreach(release)
         OapDataFile.this.close()
       }
     }
   }
 
   // full file scan
-  def iterator(requiredIds: Array[Int]): OapIterator[InternalRow] = {
-    buildIterator(configuration, requiredIds, rowIds = None)
+  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
+    buildIterator(configuration, requiredIds, rowIds = None, filters)
   }
 
   // scan by given row ids, and we assume the rowIds are sorted
-  def iterator(
+  def iteratorWithRowIds(
       requiredIds: Array[Int],
-      rowIds: Array[Int]): OapIterator[InternalRow] = {
-    buildIterator(configuration, requiredIds, Some(rowIds))
+      rowIds: Array[Int],
+      filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
+    buildIterator(configuration, requiredIds, Some(rowIds), filters)
   }
 
   def close(): Unit = {

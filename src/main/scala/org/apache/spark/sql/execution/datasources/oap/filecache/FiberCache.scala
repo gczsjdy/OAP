@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
-import org.apache.spark.sql.execution.datasources.oap.ColumnValues
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.memory.MemoryBlock
 import org.apache.spark.unsafe.types.UTF8String
@@ -71,7 +70,7 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
         }
       }
     }
-    logWarning(s"Fiber Cache Dispose waiting detected for ${fiber}")
+    logWarning(s"Fiber Cache Dispose waiting detected for $fiber")
     false
   }
 
@@ -126,22 +125,15 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
     bytes
   }
 
-  /** TODO: may cause copy memory from off-heap to on-heap, used by [[ColumnValues]] */
-  protected def copyMemory(offset: Long, dst: AnyRef, dstOffset: Long, length: Long): Unit =
-    Platform.copyMemory(getBaseObj, getBaseOffset + offset, dst, dstOffset, length)
-
-  def copyMemoryToLongs(offset: Long, dst: Array[Long]): Unit =
-    copyMemory(offset, dst, Platform.LONG_ARRAY_OFFSET, dst.length * 8)
-
-  def copyMemoryToInts(offset: Long, dst: Array[Int]): Unit =
-    copyMemory(offset, dst, Platform.INT_ARRAY_OFFSET, dst.length * 4)
-
-  def copyMemoryToBytes(offset: Long, dst: Array[Byte]): Unit =
-    copyMemory(offset, dst, Platform.BYTE_ARRAY_OFFSET, dst.length)
+  private def copyMemoryToBytes(offset: Long, dst: Array[Byte]): Unit = {
+    Platform.copyMemory(
+      getBaseObj, getBaseOffset + offset, dst, Platform.BYTE_ARRAY_OFFSET, dst.length)
+  }
 
   def size(): Long = fiberData.size()
 }
 
+// TODO: Need modify `OapBitmapWrappedFiberCache` to not depend on this.
 case class WrappedFiberCache(fc: FiberCache) {
   private var released = false
 
