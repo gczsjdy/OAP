@@ -120,6 +120,7 @@ private[oap] class RowGroupMeta {
     fiberUncompressedLens.indices.foreach(fiberUncompressedLens(_) = is.readInt())
     statistics = new Array[ColumnStatistics](fieldCount)
     statistics.indices.foreach(statistics(_) = ColumnStatistics(is))
+    this
   }
 }
 
