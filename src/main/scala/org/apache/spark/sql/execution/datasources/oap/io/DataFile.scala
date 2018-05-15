@@ -94,7 +94,7 @@ private[oap] case class VectorizedContext(
     returningBatch: Boolean)
 
 /**
- * The data file handle, will be cached for performance purpose, as we don't want to open the
+ * The data file meta, will be cached for performance purpose, as we don't want to open the
  * specified file again and again to get its data meta, the data file extension can have its own
  * implementation.
  */

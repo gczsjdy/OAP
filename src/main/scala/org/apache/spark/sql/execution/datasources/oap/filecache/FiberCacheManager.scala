@@ -189,7 +189,7 @@ private[oap] object DataFileMetaCacheManager extends Logging {
       .removalListener(new RemovalListener[ENTRY, DataFileMeta]() {
         override def onRemoval(n: RemovalNotification[ENTRY, DataFileMeta])
         : Unit = {
-          logDebug(s"Evicting Data File Handle ${n.getKey.path}")
+          logDebug(s"Evicting Data File Meta ${n.getKey.path}")
           _cacheSize.addAndGet(-n.getValue.len)
           n.getValue.close
         }
@@ -197,10 +197,10 @@ private[oap] object DataFileMetaCacheManager extends Logging {
       .build[ENTRY, DataFileMeta](new CacheLoader[ENTRY, DataFileMeta]() {
         override def load(entry: ENTRY)
         : DataFileMeta = {
-          logDebug(s"Loading Data File Handle ${entry.path}")
-          val handle = entry.getDataFileMeta()
-          _cacheSize.addAndGet(handle.len)
-          handle
+          logDebug(s"Loading Data File Meta ${entry.path}")
+          val meta = entry.getDataFileMeta()
+          _cacheSize.addAndGet(meta.len)
+          meta
         }
       })
 
