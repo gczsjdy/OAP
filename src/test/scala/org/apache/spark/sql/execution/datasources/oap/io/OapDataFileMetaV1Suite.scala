@@ -34,7 +34,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
   private val tmpDir = Utils.createTempDir()
   private val conf = new Configuration()
 
-  private lazy val genOapDataFileMeta: Gen[OapDataFileMeta] = {
+  private lazy val genOapDataFileMeta: Gen[OapDataFileMetaV1] = {
     // TODO: [linhong] Need determine the range of each value.
     for { rowGroupCount <- Gen.choose[Int](1, 1000)
       defaultRowCount <- Gen.choose[Int](1, 1048576)
@@ -46,8 +46,8 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
         CompressionCodec.LZO,
         CompressionCodec.GZIP,
         CompressionCodec.UNCOMPRESSED)
-      columnsMeta <- Gen.listOfN(fieldCount, arbitrary[ColumnMeta])
-      rowGroupStatistics <- Gen.listOfN(fieldCount, arbitrary[ColumnStatistics])
+      columnsMeta <- Gen.listOfN(fieldCount, arbitrary[ColumnMetaV1])
+      rowGroupStatistics <- Gen.listOfN(fieldCount, arbitrary[ColumnStatisticsV1])
     } yield generateOapDataFileMeta(rowGroupCount,
       defaultRowCount,
       fieldCount,
@@ -59,7 +59,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
       rowGroupStatistics.toArray)
   }
 
-  implicit lazy val arbOapDataFileMeta: Arbitrary[OapDataFileMeta] = {
+  implicit lazy val arbOapDataFileMeta: Arbitrary[OapDataFileMetaV1] = {
     Arbitrary(genOapDataFileMeta)
   }
 
@@ -70,13 +70,13 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
       lastRowCount: Int,
       fiberLens: Array[Int],
       uncompressedFiberLens: Array[Int],
-      columnsMeta: Seq[ColumnMeta],
+      columnsMeta: Seq[ColumnMetaV1],
       codec: CompressionCodec,
-      rowGroupStatistics: Array[ColumnStatistics]): OapDataFileMeta = {
+      rowGroupStatistics: Array[ColumnStatisticsV1]): OapDataFileMetaV1 = {
 
-    val rowGroupMetaArray = new Array[RowGroupMeta](rowGroupCount)
+    val rowGroupMetaArray = new Array[RowGroupMetaV1](rowGroupCount)
     rowGroupMetaArray.indices.foreach(
-      rowGroupMetaArray(_) = new RowGroupMeta()
+      rowGroupMetaArray(_) = new RowGroupMetaV1()
         .withNewStart(0)
         .withNewEnd(100)
         .withNewFiberLens(fiberLens)
@@ -84,7 +84,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
         .withNewStatistics(rowGroupStatistics)
     )
 
-    val oapDataFileMeta = new OapDataFileMeta(
+    val oapDataFileMeta = new OapDataFileMetaV1(
       rowCountInEachGroup = defaultRowCount,
       fieldCount = fieldCount,
       codec = codec
@@ -100,37 +100,37 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
     oapDataFileMeta
   }
 
-  private lazy val genColumnMeta: Gen[ColumnMeta] = {
+  private lazy val genColumnMeta: Gen[ColumnMetaV1] = {
     for {
       encoding <- Gen.oneOf(Encoding.PLAIN, Encoding.RLE, Encoding.RLE_DICTIONARY,
         Encoding.DELTA_LENGTH_BYTE_ARRAY, Encoding.DELTA_BINARY_PACKED)
       dictionaryDataLength <- Gen.posNum[Int]
       dictionaryIdSize <- Gen.posNum[Int]
-      statistics <- arbitrary[ColumnStatistics]
+      statistics <- arbitrary[ColumnStatisticsV1]
     } yield {
-      new ColumnMeta(encoding, dictionaryDataLength, dictionaryIdSize, statistics)
+      new ColumnMetaV1(encoding, dictionaryDataLength, dictionaryIdSize, statistics)
     }
   }
 
-  implicit lazy val arbColumnMeta: Arbitrary[ColumnMeta] = Arbitrary(genColumnMeta)
+  implicit lazy val arbColumnMeta: Arbitrary[ColumnMetaV1] = Arbitrary(genColumnMeta)
 
-  private lazy val genColumnStatistics: Gen[ColumnStatistics] = {
+  private lazy val genColumnStatistics: Gen[ColumnStatisticsV1] = {
     for { min <- arbitrary[Array[Byte]]
           max <- arbitrary[Array[Byte]]
     } yield {
         if (min.isEmpty || max.isEmpty) {
-          new ColumnStatistics(null, null)
+          new ColumnStatisticsV1(null, null)
         } else {
-          new ColumnStatistics(min, max)
+          new ColumnStatisticsV1(min, max)
         }
       }
   }
 
-  implicit lazy val arbColumnStatistics: Arbitrary[ColumnStatistics] = {
+  implicit lazy val arbColumnStatistics: Arbitrary[ColumnStatisticsV1] = {
     Arbitrary(genColumnStatistics)
   }
 
-  private def isEqual(l: RowGroupMeta, r: RowGroupMeta): Boolean = {
+  private def isEqual(l: RowGroupMetaV1, r: RowGroupMetaV1): Boolean = {
     l.start == r.start && l.end == r.end &&
       (l.fiberLens sameElements r.fiberLens) &&
       (l.fiberUncompressedLens sameElements r.fiberUncompressedLens) &&
@@ -139,7 +139,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
       }
   }
 
-  private def isEqual(l: OapDataFileMeta, r: OapDataFileMeta): Boolean = {
+  private def isEqual(l: OapDataFileMetaV1, r: OapDataFileMetaV1): Boolean = {
 
     l.rowCountInEachGroup == r.rowCountInEachGroup &&
       l.rowCountInLastGroup == r.rowCountInLastGroup &&
@@ -156,7 +156,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
       }
   }
 
-  def isEqual(l: ColumnMeta, r: ColumnMeta): Boolean = {
+  def isEqual(l: ColumnMetaV1, r: ColumnMetaV1): Boolean = {
 
     l.encoding == r.encoding &&
       l.dictionaryDataLength == r.dictionaryDataLength &&
@@ -164,7 +164,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
     isEqual(l.fileStatistics, r.fileStatistics)
   }
 
-  def isEqual(l: ColumnStatistics, r: ColumnStatistics): Boolean = {
+  def isEqual(l: ColumnStatisticsV1, r: ColumnStatisticsV1): Boolean = {
 
     // Equal conditions:
     // Both have no Min Max data
@@ -174,28 +174,28 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
   }
 
 
-  property("read/write ColumnStatistics") = forAll { (columnStatistics: ColumnStatistics) =>
+  property("read/write ColumnStatistics") = forAll { (columnStatistics: ColumnStatisticsV1) =>
     val columnStatistics2 = columnStatistics match {
-      case ColumnStatistics(bytes) =>
+      case ColumnStatisticsV1(bytes) =>
         val in = new DataInputStream(new ByteArrayInputStream(bytes))
-        ColumnStatistics(in)
+        ColumnStatisticsV1(in)
     }
 
     isEqual(columnStatistics, columnStatistics2)
   }
 
-  property("read/write ColumnMeta") = forAll { (columnMeta: ColumnMeta) =>
+  property("read/write ColumnMeta") = forAll { (columnMeta: ColumnMetaV1) =>
     val columnMeta2 = columnMeta match {
-      case ColumnMeta(bytes) =>
+      case ColumnMetaV1(bytes) =>
         val in = new DataInputStream(new ByteArrayInputStream(bytes))
-        ColumnMeta(in)
+        ColumnMetaV1(in)
     }
 
     isEqual(columnMeta, columnMeta2)
   }
 
   property("read/write OapDataFileMeta") =
-    forAll { (oapDataFileMeta: OapDataFileMeta) =>
+    forAll { (oapDataFileMeta: OapDataFileMetaV1) =>
 
     val file = new Path(
       new File(tmpDir.getAbsolutePath, "testOapDataFileMeta.meta").getAbsolutePath)
@@ -206,14 +206,14 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
     output.close()
 
     // Read OapDataFileMeta from file
-    val fileMeta = new OapDataFileMeta().read(fs.open(file), fs.getFileStatus(file).getLen)
+    val fileMeta = new OapDataFileMetaV1().read(fs.open(file), fs.getFileStatus(file).getLen)
     fs.delete(file, false)
 
     isEqual(fileMeta, oapDataFileMeta)
   }
 }
 
-class OapDataFileMetaSuite extends SparkFunSuite with Checkers {
+class OapDataFileMetaV1Suite extends SparkFunSuite with Checkers {
 
   test("Check OapDataFileMeta Read/Write") {
     check(new OapDataFileMetaCheck)
