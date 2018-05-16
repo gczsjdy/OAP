@@ -18,20 +18,16 @@
 package org.apache.spark.sql.execution.datasources.oap.io
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FSDataInputStream, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Ascending
-import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
 import org.apache.spark.sql.execution.datasources.oap.index.IndexScanners
-import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion
-import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion.DataFileVersion
 import org.apache.spark.sql.execution.datasources.oap.utils.OapIndexInfoStatusSerDe
 import org.apache.spark.sql.oap.listener.SparkListenerOapIndexInfoUpdate
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.TimeStampedHashMap
 
 private[oap] case class OapIndexInfoStatus(path: String, useIndex: Boolean)
@@ -62,42 +58,16 @@ private[sql] object OapIndexInfo extends Logging {
 /**
  * Compared to [[OapDataReader]], this is a relatively low-level reader, which doesn't care about
  * things like skipByPartitionFile, etc.
+ * Note that there is no abstract class like OapDataScanner due to the 'initialize' function's
+ * definition should be arbitrary, for instance, whatever the args are, as long as to return an
+ * Iterator.
  */
-private[oap] object OapDataScanner {
-  def apply(is: FSDataInputStream, fileLen: Long): OapDataScanner = {
-
-  }
-
-  def readVersion(is: FSDataInputStream, fileLen: Long): DataFileVersion = {
-    val MAGIC_VERSION_LENGTH = 4
-    val oapDataFileMetaLengthIndex = fileLen - 4
-
-    // seek to the position of data file meta length
-    is.seek(oapDataFileMetaLengthIndex)
-    val oapDataFileMetaLength = is.readInt()
-    // read all bytes of data file meta
-    val magicBuffer = new Array[Byte](MAGIC_VERSION_LENGTH)
-    is.readFully(oapDataFileMetaLengthIndex - oapDataFileMetaLength, magicBuffer)
-
-    val magic = UTF8String.fromBytes(magicBuffer).toString
-    if (! magic.contains("OAP")) {
-      throw new OapException("Not a valid Oap Data File")
-    } else if (magic == "OAP1") {
-      DataFileVersion.OAP_DATAFILE_V1
-    } else {
-      throw new OapException("Not a supported Oap Data File version")
-    }
-  }
-}
-
-private[oap] abstract class OapDataScanner {}
-
 private[oap] class OapDataScannerV1(
     path: Path,
     meta: DataSourceMeta,
     filterScanners: Option[IndexScanners],
     requiredIds: Array[Int],
-    context: Option[VectorizedContext] = None) extends OapDataScanner with Logging {
+    context: Option[VectorizedContext] = None) extends Logging {
 
   import org.apache.spark.sql.execution.datasources.oap.INDEX_STAT._
 
@@ -114,7 +84,7 @@ private[oap] class OapDataScannerV1(
       conf: Configuration,
       options: Map[String, String] = Map.empty,
       filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
-    logDebug("Initializing OapDataReader...")
+    logDebug("Initializing OapDataScanner...")
     // TODO how to save the additional FS operation to get the Split size
     val fileScanner = DataFile(path.toString, meta.schema, meta.dataReaderClassName, conf)
     if (meta.dataReaderClassName.contains("ParquetDataFile")) {

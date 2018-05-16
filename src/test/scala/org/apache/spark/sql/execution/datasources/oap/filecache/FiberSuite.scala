@@ -202,7 +202,7 @@ class FiberSuite extends SharedOapContext with Logging {
       count: Int): Unit = {
     val m = DataSourceMeta.newBuilder().
       withNewSchema(schema).
-      withNewDataReaderClassName(OapFileFormat.OAP_DATA_FILE_CLASSNAME).build()
+      withNewDataReaderClassName(OapFileFormat.OAP_DATA_FILE_V1_CLASSNAME).build()
     val reader = new OapDataScannerV1(path, m, None, requiredIds)
     val it = reader.initialize(configuration)
 

@@ -23,7 +23,7 @@ import org.apache.spark.sql.execution.datasources.OapException
  * This class represents all the configurable OAP Data File properties.
  * For now, only contains file version.
  */
-private[index] object OapDataFileProperties {
+private[io] object OapDataFileProperties {
 
   import DataFileVersion.DataFileVersion
 

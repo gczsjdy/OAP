@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.oap
 
-import scala.collection.mutable
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
@@ -30,6 +28,7 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.oap.index.{IndexContext, ScannerBuilder}
 import org.apache.spark.sql.execution.datasources.oap.io._
 import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -94,16 +93,17 @@ private[sql] class OapFileFormat extends FileFormat
   var inferSchema: Option[StructType] = _
   var meta: Option[DataSourceMeta] = _
   // map of columns->IndexType
-  private val hitIndexColumns: mutable.Map[String, IndexType] = mutable.Map.empty
+  private var hitIndexColumns: Map[String, IndexType] = Map.empty
 
   def initMetrics(metrics: Map[String, SQLMetric]): Unit =
     oapMetrics.initMetrics(metrics)
 
   def getHitIndexColumns: Map[String, IndexType] = {
-    if (this.hitIndexColumns == mutable.Map.empty) {
-      logWarning("Trigger buildReaderWithPartitionValues before getHitIndexColumns")
+    if (this.hitIndexColumns == Map.empty) {
+      logWarning(
+        "Trigger buildReaderWithPartitionValues before getHitIndexColumns or no hit index column")
     }
-    this.hitIndexColumns.toMap
+    this.hitIndexColumns
   }
 
   override def prepareWrite(
@@ -161,6 +161,110 @@ private[sql] class OapFileFormat extends FileFormat
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
 
+    // TODO we need to pass the extra data source meta information via the func parameter
+    meta match {
+      case Some(m) =>
+        logDebug("Building OapDataReader with "
+            + m.dataReaderClassName.substring(m.dataReaderClassName.lastIndexOf(".") + 1)
+            + " ...")
+
+        // Check whether this filter conforms to certain patterns that could benefit from index
+        def canTriggerIndex(filter: Filter): Boolean = {
+          var attr: String = null
+          def checkAttribute(filter: Filter): Boolean = filter match {
+            case Or(left, right) =>
+              checkAttribute(left) && checkAttribute(right)
+            case And(left, right) =>
+              checkAttribute(left) && checkAttribute(right)
+            case EqualTo(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case LessThan(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case LessThanOrEqual(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case GreaterThan(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case GreaterThanOrEqual(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case In(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case IsNull(attribute) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case IsNotNull(attribute) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case StringStartsWith(attribute, _) =>
+              if (attr == null || attr == attribute) {
+                attr = attribute;
+                true
+              } else false
+            case _ => false
+          }
+
+          checkAttribute(filter)
+        }
+
+        val ic = new IndexContext(m)
+
+        if (m.indexMetas.nonEmpty) {
+          // check and use index
+          logDebug("Supported Filters by Oap:")
+          // filter out the "filters" on which we can use index
+          val supportFilters = filters.toArray.filter(canTriggerIndex)
+          // After filtered, supportFilter only contains:
+          // 1. Or predicate that contains only one attribute internally;
+          // 2. Some atomic predicates, such as LessThan, EqualTo, etc.
+          if (supportFilters.nonEmpty) {
+            // determine whether we can use index
+            supportFilters.foreach(filter => logDebug("\t" + filter.toString))
+            // get index options such as limit, order, etc.
+            val indexOptions = options.filterKeys(OapFileFormat.oapOptimizationKeySeq.contains(_))
+            val maxChooseSize = sparkSession.conf.get(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE)
+            val indexDisableList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST)
+            ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize, indexDisableList)
+          }
+        }
+
+        val filterScanners = ic.getScanners
+        filterScanners match {
+          case Some(s) =>
+            hitIndexColumns = s.scanners.flatMap { scanner =>
+              scanner.keyNames.map(n => n -> scanner.meta.indexType)
+            }.toMap
+          case _ =>
+        }
+
+        OapDataReader.read(m, sparkSession, filterScanners, dataSchema, partitionSchema,
+          requiredSchema, filters, options, supportBatch _, hadoopConf)
+
+      case None => (_: PartitionedFile) => {
+        // TODO need to think about when there is no oap.meta file at all
+        Iterator.empty
+      }
+    }
 
   }
 
@@ -262,7 +366,7 @@ private[oap] class OapOutputWriterFactory(
     val path = new Path(outputRoot, OapFileFormat.OAP_META_FILE)
 
     val builder = DataSourceMeta.newBuilder()
-      .withNewDataReaderClassName(OapFileFormat.OAP_DATA_FILE_CLASSNAME)
+      .withNewDataReaderClassName(OapFileFormat.OAP_DATA_FILE_V1_CLASSNAME)
     val conf = job.getConfiguration
     val partitionMeta = taskResults.map {
       // The file fingerprint is not used at the moment.
@@ -344,7 +448,7 @@ private[sql] object OapFileFormat {
   val OAP_DATA_EXTENSION = ".data"
   val OAP_INDEX_EXTENSION = ".index"
   val OAP_META_FILE = ".oap.meta"
-  val OAP_DATA_FILE_CLASSNAME = classOf[OapDataFileV1].getCanonicalName
+  val OAP_DATA_FILE_V1_CLASSNAME = classOf[OapDataFileV1].getCanonicalName
   val PARQUET_DATA_FILE_CLASSNAME = classOf[ParquetDataFile].getCanonicalName
 
   val COMPRESSION = "oap.compression"
