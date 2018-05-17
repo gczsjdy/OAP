@@ -165,8 +165,8 @@ private[sql] class OapFileFormat extends FileFormat
     meta match {
       case Some(m) =>
         logDebug("Building OapDataReader with "
-            + m.dataReaderClassName.substring(m.dataReaderClassName.lastIndexOf(".") + 1)
-            + " ...")
+          + m.dataReaderClassName.substring(m.dataReaderClassName.lastIndexOf(".") + 1)
+          + " ...")
 
         // Check whether this filter conforms to certain patterns that could benefit from index
         def canTriggerIndex(filter: Filter): Boolean = {
@@ -177,50 +177,23 @@ private[sql] class OapFileFormat extends FileFormat
             case And(left, right) =>
               checkAttribute(left) && checkAttribute(right)
             case EqualTo(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case LessThan(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case LessThanOrEqual(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case GreaterThan(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case GreaterThanOrEqual(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case In(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case IsNull(attribute) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case IsNotNull(attribute) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case StringStartsWith(attribute, _) =>
-              if (attr == null || attr == attribute) {
-                attr = attribute;
-                true
-              } else false
+              if (attr == null || attr == attribute) {attr = attribute; true} else false
             case _ => false
           }
 

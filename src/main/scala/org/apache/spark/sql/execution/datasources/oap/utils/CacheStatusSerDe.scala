@@ -20,9 +20,8 @@ package org.apache.spark.sql.execution.datasources.oap.utils
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
-
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheStatus
-import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileMetaV1
+import org.apache.spark.sql.execution.datasources.oap.io.meta.OapDataFileMetaV1
 import org.apache.spark.util.collection.BitSet
 
 /**

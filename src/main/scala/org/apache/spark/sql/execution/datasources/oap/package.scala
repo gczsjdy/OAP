@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
-import org.apache.spark.sql.execution.datasources.oap.io.ColumnStatisticsV1
+import org.apache.spark.sql.execution.datasources.oap.io.meta.ColumnStatistics
 import org.apache.spark.sql.execution.datasources.oap.utils.OapUtils
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -31,7 +31,7 @@ package object oap {
 
   // Return if the rowGroup or file can be skipped by min max statistics
   def isSkippedByStatistics(
-      columnStats: Array[ColumnStatisticsV1],
+      columnStats: Array[ColumnStatistics],
       filter: Filter,
       schema: StructType): Boolean = filter match {
     case Or(left, right) =>

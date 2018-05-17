@@ -21,7 +21,7 @@ import org.apache.parquet.column.Dictionary
 import org.apache.parquet.column.values.deltastrings.DeltaByteArrayReader
 import org.apache.parquet.column.values.dictionary.DictionaryValuesReader
 import org.apache.parquet.format.Encoding
-
+import org.apache.spark.sql.execution.datasources.oap.io.meta.OapDataFileMetaV1
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.collection.BitSet

@@ -26,6 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.oap.OapFileFormat
 import org.apache.spark.sql.execution.datasources.oap.filecache.DataFiberBuilder
+import org.apache.spark.sql.execution.datasources.oap.io.meta.{ColumnMetaV1, ColumnStatistics, OapDataFileMetaV1, RowGroupMetaV1}
 import org.apache.spark.sql.types._
 
 // TODO: [linhong] Let's remove the `isCompressed` argument
@@ -50,11 +51,11 @@ private[oap] class OapDataWriter(
   private val rowGroup: Array[DataFiberBuilder] =
     DataFiberBuilder.initializeFromSchema(schema, ROW_GROUP_SIZE)
 
-  private val fileStatiscs = ColumnStatisticsV1.getStatsFromSchema(schema)
-  private var rowGroupstatistics = ColumnStatisticsV1.getStatsFromSchema(schema)
+  private val fileStatiscs = ColumnStatistics.getStatsFromSchema(schema)
+  private var rowGroupstatistics = ColumnStatistics.getStatsFromSchema(schema)
 
   private def updateStats(
-      stats: ColumnStatisticsV1.ParquetStatistics,
+      stats: ColumnStatistics.ParquetStatistics,
       row: InternalRow,
       index: Int,
       dataType: DataType): Unit = {
@@ -108,7 +109,7 @@ private[oap] class OapDataWriter(
     rowGroupMeta.withNewStart(out.getPos)
         .withNewFiberLens(fiberLens)
         .withNewUncompressedFiberLens(fiberUncompressedLens)
-        .withNewStatistics(rowGroupstatistics.map(ColumnStatisticsV1(_)).toArray)
+        .withNewStatistics(rowGroupstatistics.map(ColumnStatistics(_)).toArray)
 
     while (idx < rowGroup.length) {
       val fiberByteData = rowGroup(idx).build()
@@ -121,7 +122,7 @@ private[oap] class OapDataWriter(
       rowGroup(idx).clear()
       idx += 1
     }
-    rowGroupstatistics = ColumnStatisticsV1.getStatsFromSchema(schema)
+    rowGroupstatistics = ColumnStatistics.getStatsFromSchema(schema)
     fiberMeta.appendRowGroupMeta(rowGroupMeta.withNewEnd(out.getPos))
   }
 
@@ -142,7 +143,7 @@ private[oap] class OapDataWriter(
       }
       fiberMeta.appendColumnMeta(
         new ColumnMetaV1(
-          encoding, dictionaryDataLength, dictionaryIdSize, ColumnStatisticsV1(fileStatiscs(i))))
+          encoding, dictionaryDataLength, dictionaryIdSize, ColumnStatistics(fileStatiscs(i))))
     }
 
     // and update the group count and row count in the last group

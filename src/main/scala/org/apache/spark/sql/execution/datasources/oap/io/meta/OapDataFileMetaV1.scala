@@ -15,21 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.oap.io
+package org.apache.spark.sql.execution.datasources.oap.io.meta
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
-import org.apache.parquet.column.statistics._
 import org.apache.parquet.format.{CompressionCodec, Encoding}
 
 import org.apache.spark.sql.execution.datasources.OapException
-import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-//  OAP Data File Meta Part
+//  OAP Data File V1 Meta Part
 //  ..
 //  Field                               Length In Byte
 //  Meta
@@ -66,175 +64,6 @@ import org.apache.spark.unsafe.types.UTF8String
 //    ..                                16 + 4 * Field Count In Each Row * 2
 //    RowGroup Meta #N                  16 + 4 * Field Count In Each Row * 2
 //    Meta Data Length                  4
-
-abstract class OapDataFileMeta extends DataFileMeta
-
-private[oap] class RowGroupMetaV1 {
-  var start: Long = _
-  var end: Long = _
-  var fiberLens: Array[Int] = _
-  var fiberUncompressedLens: Array[Int] = _
-  var statistics: Array[ColumnStatisticsV1] = _
-
-  def withNewStart(newStart: Long): RowGroupMetaV1 = {
-    this.start = newStart
-    this
-  }
-
-  def withNewEnd(newEnd: Long): RowGroupMetaV1 = {
-    this.end = newEnd
-    this
-  }
-
-  def withNewFiberLens(newFiberLens: Array[Int]): RowGroupMetaV1 = {
-    this.fiberLens = newFiberLens
-    this
-  }
-
-  def withNewUncompressedFiberLens(newUncompressedFiberLens: Array[Int]): RowGroupMetaV1 = {
-    this.fiberUncompressedLens = newUncompressedFiberLens
-    this
-  }
-
-  def withNewStatistics(newStatistics: Array[ColumnStatisticsV1]): RowGroupMetaV1 = {
-    this.statistics = newStatistics
-    this
-  }
-
-  def write(os: FSDataOutputStream): RowGroupMetaV1 = {
-    os.writeLong(start)
-    os.writeLong(end)
-    fiberLens.foreach(os.writeInt)
-    fiberUncompressedLens.foreach(os.writeInt)
-    statistics.foreach {
-      case ColumnStatisticsV1(bytes) => os.write(bytes)
-    }
-    this
-  }
-
-  def read(is: DataInputStream, fieldCount: Int): RowGroupMetaV1 = {
-    start = is.readLong()
-    end = is.readLong()
-    fiberLens = new Array[Int](fieldCount)
-    fiberUncompressedLens = new Array[Int](fieldCount)
-
-    fiberLens.indices.foreach(fiberLens(_) = is.readInt())
-    fiberUncompressedLens.indices.foreach(fiberUncompressedLens(_) = is.readInt())
-    statistics = new Array[ColumnStatisticsV1](fieldCount)
-    statistics.indices.foreach(statistics(_) = ColumnStatisticsV1(is))
-    this
-  }
-}
-
-private[oap] class ColumnStatisticsV1(val min: Array[Byte], val max: Array[Byte]) {
-  def hasNonNullValue: Boolean = min != null && max != null
-
-  def isEmpty: Boolean = !hasNonNullValue
-}
-
-private[oap] object ColumnStatisticsV1 {
-
-  type ParquetStatistics = org.apache.parquet.column.statistics.Statistics[_ <: Comparable[_]]
-
-  def getStatsBasedOnType(dataType: DataType): ParquetStatistics = {
-    dataType match {
-      case BooleanType => new BooleanStatistics()
-      case IntegerType | ByteType | DateType | ShortType => new IntStatistics()
-      case StringType | BinaryType => new BinaryStatistics()
-      case FloatType => new FloatStatistics()
-      case DoubleType => new DoubleStatistics()
-      case LongType => new LongStatistics()
-      case _ => sys.error(s"Not support data type: $dataType")
-    }
-  }
-
-  def getStatsFromSchema(schema: StructType): Seq[ParquetStatistics] = {
-    schema.map{ field => getStatsBasedOnType(field.dataType)}
-  }
-
-  def apply(stat: ParquetStatistics): ColumnStatisticsV1 = {
-    if (!stat.hasNonNullValue) {
-      new ColumnStatisticsV1(null, null)
-    } else {
-      new ColumnStatisticsV1(stat.getMinBytes, stat.getMaxBytes)
-    }
-  }
-
-  def apply(in: DataInputStream): ColumnStatisticsV1 = {
-
-    val minLength = in.readInt()
-    val min = if (minLength != 0) {
-      val bytes = new Array[Byte](minLength)
-      in.readFully(bytes)
-      bytes
-    } else {
-      null
-    }
-
-    val maxLength = in.readInt()
-    val max = if (maxLength != 0) {
-      val bytes = new Array[Byte](maxLength)
-      in.readFully(bytes)
-      bytes
-    } else {
-      null
-    }
-
-    new ColumnStatisticsV1(min, max)
-  }
-
-  def unapply(statistics: ColumnStatisticsV1): Option[Array[Byte]] = {
-    val buf = new ByteArrayOutputStream()
-    val out = new DataOutputStream(buf)
-
-    if (statistics.hasNonNullValue) {
-      out.writeInt(statistics.min.length)
-      out.write(statistics.min)
-      out.writeInt(statistics.max.length)
-      out.write(statistics.max)
-    } else {
-      out.writeInt(0)
-      out.writeInt(0)
-    }
-
-    Some(buf.toByteArray)
-  }
-}
-
-private[oap] class ColumnMetaV1(
-    val encoding: Encoding,
-    val dictionaryDataLength: Int,
-    val dictionaryIdSize: Int,
-    val fileStatistics: ColumnStatisticsV1) {}
-
-private[oap] object ColumnMetaV1 {
-
-  def apply(in: DataInputStream): ColumnMetaV1 = {
-
-    val encoding = Encoding.findByValue(in.readInt())
-    val dictionaryDataLength = in.readInt()
-    val dictionaryIdSize = in.readInt()
-
-    val fileStatistics = ColumnStatisticsV1(in)
-
-    new ColumnMetaV1(encoding, dictionaryDataLength, dictionaryIdSize, fileStatistics)
-  }
-
-  def unapply(columnMeta: ColumnMetaV1): Option[Array[Byte]] = {
-    val buf = new ByteArrayOutputStream()
-    val out = new DataOutputStream(buf)
-
-    out.writeInt(columnMeta.encoding.getValue)
-    out.writeInt(columnMeta.dictionaryDataLength)
-    out.writeInt(columnMeta.dictionaryIdSize)
-
-    columnMeta.fileStatistics match {
-      case ColumnStatisticsV1(bytes) => out.write(bytes)
-    }
-
-    Some(buf.toByteArray)
-  }
-}
 
 private[oap] class OapDataFileMetaV1(
     var rowGroupsMeta: ArrayBuffer[RowGroupMetaV1] = new ArrayBuffer[RowGroupMetaV1](),
@@ -349,4 +178,96 @@ private[oap] class OapDataFileMetaV1(
   override def getGroupCount: Int = groupCount
 
   override def getFieldCount: Int = fieldCount
+}
+
+private[oap] class RowGroupMetaV1 {
+  var start: Long = _
+  var end: Long = _
+  var fiberLens: Array[Int] = _
+  var fiberUncompressedLens: Array[Int] = _
+  var statistics: Array[ColumnStatistics] = _
+
+  def withNewStart(newStart: Long): RowGroupMetaV1 = {
+    this.start = newStart
+    this
+  }
+
+  def withNewEnd(newEnd: Long): RowGroupMetaV1 = {
+    this.end = newEnd
+    this
+  }
+
+  def withNewFiberLens(newFiberLens: Array[Int]): RowGroupMetaV1 = {
+    this.fiberLens = newFiberLens
+    this
+  }
+
+  def withNewUncompressedFiberLens(newUncompressedFiberLens: Array[Int]): RowGroupMetaV1 = {
+    this.fiberUncompressedLens = newUncompressedFiberLens
+    this
+  }
+
+  def withNewStatistics(newStatistics: Array[ColumnStatistics]): RowGroupMetaV1 = {
+    this.statistics = newStatistics
+    this
+  }
+
+  def write(os: FSDataOutputStream): RowGroupMetaV1 = {
+    os.writeLong(start)
+    os.writeLong(end)
+    fiberLens.foreach(os.writeInt)
+    fiberUncompressedLens.foreach(os.writeInt)
+    statistics.foreach {
+      case ColumnStatistics(bytes) => os.write(bytes)
+    }
+    this
+  }
+
+  def read(is: DataInputStream, fieldCount: Int): RowGroupMetaV1 = {
+    start = is.readLong()
+    end = is.readLong()
+    fiberLens = new Array[Int](fieldCount)
+    fiberUncompressedLens = new Array[Int](fieldCount)
+
+    fiberLens.indices.foreach(fiberLens(_) = is.readInt())
+    fiberUncompressedLens.indices.foreach(fiberUncompressedLens(_) = is.readInt())
+    statistics = new Array[ColumnStatistics](fieldCount)
+    statistics.indices.foreach(statistics(_) = ColumnStatistics(is))
+    this
+  }
+}
+
+private[oap] class ColumnMetaV1(
+    val encoding: Encoding,
+    val dictionaryDataLength: Int,
+    val dictionaryIdSize: Int,
+    val fileStatistics: ColumnStatistics) {}
+
+private[oap] object ColumnMetaV1 {
+
+  def apply(in: DataInputStream): ColumnMetaV1 = {
+
+    val encoding = Encoding.findByValue(in.readInt())
+    val dictionaryDataLength = in.readInt()
+    val dictionaryIdSize = in.readInt()
+
+    val fileStatistics = ColumnStatistics(in)
+
+    new ColumnMetaV1(encoding, dictionaryDataLength, dictionaryIdSize, fileStatistics)
+  }
+
+  def unapply(columnMeta: ColumnMetaV1): Option[Array[Byte]] = {
+    val buf = new ByteArrayOutputStream()
+    val out = new DataOutputStream(buf)
+
+    out.writeInt(columnMeta.encoding.getValue)
+    out.writeInt(columnMeta.dictionaryDataLength)
+    out.writeInt(columnMeta.dictionaryIdSize)
+
+    columnMeta.fileStatistics match {
+      case ColumnStatistics(bytes) => out.write(bytes)
+    }
+
+    Some(buf.toByteArray)
+  }
 }

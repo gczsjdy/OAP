@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.datasources.oap.filecache.DataFileMetaCach
 import org.apache.spark.sql.execution.datasources.oap.index.{IndexContext, IndexScanners, ScannerBuilder}
 import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion
 import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion.DataFileVersion
+import org.apache.spark.sql.execution.datasources.oap.io.meta.OapDataFileMetaV1
 import org.apache.spark.sql.execution.datasources.oap.utils.FilterHelper
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.sources.Filter

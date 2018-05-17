@@ -18,12 +18,10 @@
 package org.apache.spark.sql.execution.datasources.oap.utils
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.json4s.jackson.JsonMethods._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheStatus
-import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileMetaV1
+import org.apache.spark.sql.execution.datasources.oap.io.meta.OapDataFileMetaV1
 import org.apache.spark.util.collection.BitSet
 
 class CacheStatusSerDeSuite extends SparkFunSuite {
