@@ -26,8 +26,9 @@ import org.scalacheck._
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Prop._
 import org.scalatest.prop.Checkers
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.datasources.oap.io.meta.{ColumnMetaV1, ColumnStatistics$, OapDataFileMetaV1, RowGroupMetaV1}
+import org.apache.spark.sql.execution.datasources.oap.io.meta.{ColumnMetaV1, ColumnStatistics, OapDataFileMetaV1, RowGroupMetaV1}
 import org.apache.spark.util.Utils
 
 class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
