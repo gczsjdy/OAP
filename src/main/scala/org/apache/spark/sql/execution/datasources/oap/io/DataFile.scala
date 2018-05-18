@@ -46,7 +46,7 @@ abstract class DataFile {
   // filters is used for skipping RowGroup/file according to which and statistics
   def iterator(
       requiredIds: Array[Int],
-      rowIds: Array[Int] = Array(-1),
+      rowIds: Array[Int] = Array.empty[Int],
       filters: Seq[Filter] = Nil): OapIterator[InternalRow]
   def totalRows(): Long
 }

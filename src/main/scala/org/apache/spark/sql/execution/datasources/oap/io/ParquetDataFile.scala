@@ -194,16 +194,35 @@ private[oap] case class ParquetDataFile(
     addRequestSchemaToConf(configuration, requiredIds)
     context match {
       case Some(c) =>
-        if (parquetDataCacheEnable) {
-          buildIterator(configuration, requiredIds, Some(rowIds))
+        // full scan
+        if (rowIds.isEmpty) {
+          // Parquet RowGroupCount can more than Int.MaxValue,
+          // in that sence we should not cache data in memory
+          // and rollback to read this rowgroup from file directly.
+          if (parquetDataCacheEnable &&
+              !meta.footer.getBlocks.asScala.exists(_.getRowCount > Int.MaxValue)) {
+            buildIterator(configuration, requiredIds, rowIds = None)
+          } else {
+            initVectorizedReader(c,
+              new VectorizedOapRecordReader(file, configuration, meta.footer))
+          }
         } else {
-          initVectorizedReader(c,
-            new IndexedVectorizedOapRecordReader(file, configuration, meta.footer, rowIds))
+          if (parquetDataCacheEnable) {
+            buildIterator(configuration, requiredIds, Some(rowIds))
+          } else {
+            initVectorizedReader(c,
+              new IndexedVectorizedOapRecordReader(file, configuration, meta.footer, rowIds))
+          }
         }
       case _ =>
-        initRecordReader(
-          new OapRecordReader[UnsafeRow](new ParquetReadSupportWrapper,
-            file, configuration, rowIds, meta.footer))
+        val recordReader = if (rowIds.isEmpty) {
+          new DefaultRecordReader[UnsafeRow](
+            new ParquetReadSupportWrapper, file, configuration, meta.footer)
+        } else {
+          new OapRecordReader[UnsafeRow](
+            new ParquetReadSupportWrapper, file, configuration, rowIds, meta.footer)
+        }
+        initRecordReader(recordReader)
     }
   }
 

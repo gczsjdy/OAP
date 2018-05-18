@@ -259,7 +259,6 @@ private[oap] class OapDataReader(
           }
         }
 
-
         val start = if (log.isDebugEnabled) System.currentTimeMillis else 0
         val rows = getRowIds(options)
         if (rows.isEmpty) {
