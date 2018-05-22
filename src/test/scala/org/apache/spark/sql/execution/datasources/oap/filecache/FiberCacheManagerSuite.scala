@@ -258,7 +258,7 @@ class FiberCacheManagerSuite extends SharedOapContext {
     }
     def removeWork(): Unit = {
       (1 to 100000).foreach { _ =>
-        FiberCacheManager.removeFiber(fiber)
+        FiberCacheManager.releaseFiber(fiber)
       }
     }
     val result = pool.submit(new TestCaller(occupyWork))
@@ -290,7 +290,7 @@ class FiberCacheManagerSuite extends SharedOapContext {
     assert(FiberCacheManager.pendingCount == 0)
 
     // make fiber in use the 1st element in release queue.
-    FiberCacheManager.removeFiber(fiberInUse)
+    FiberCacheManager.releaseFiber(fiberInUse)
 
     (1 to memorySizeInMB * 2).foreach { i =>
       val data = generateData(mbSize)

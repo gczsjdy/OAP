@@ -228,7 +228,7 @@ case class DropIndexCommand(
     scheduler match {
       case scheduler: CoarseGrainedSchedulerBackend =>
         SparkEnv.get.oapManager.rpcManager.send(CacheDrop(indexName))
-      case _: LocalSchedulerBackend => FiberCacheManager.removeIndexCache(indexName)
+      case _: LocalSchedulerBackend => FiberCacheManager.releaseIndexCache(indexName)
     }
 
     relation match {

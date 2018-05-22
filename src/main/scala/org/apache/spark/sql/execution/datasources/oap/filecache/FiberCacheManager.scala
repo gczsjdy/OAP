@@ -113,7 +113,7 @@ object FiberCacheManager extends Logging {
     cacheBackend.get(fiber, conf)
   }
 
-  def removeIndexCache(indexName: String): Unit = {
+  def releaseIndexCache(indexName: String): Unit = {
     logDebug(s"Going to remove all index cache of $indexName")
     val fiberToBeRemoved = cacheBackend.getFibers.filter {
       case BTreeFiber(_, file, _, _) => file.contains(indexName)
@@ -125,7 +125,7 @@ object FiberCacheManager extends Logging {
   }
 
   // Used by test suite
-  private[filecache] def removeFiber(fiber: TestFiber): Unit = {
+  private[filecache] def releaseFiber(fiber: TestFiber): Unit = {
     if (cacheBackend.getIfPresent(fiber) != null) {
       cacheBackend.invalidate(fiber)
     }
