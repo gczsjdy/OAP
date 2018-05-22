@@ -59,27 +59,30 @@ private[filecache] class CacheGuardian(maxMemory: Long) extends Thread with Logg
   }
 
   override def run(): Unit = {
-    // Loop forever, TODO: provide a release function
     while (true) {
       val (fiber, fiberCache) = removalPendingQueue.take()
-      bRemoving = true
-      logDebug(s"Removing fiber: $fiber")
-      // Block if fiber is in use.
-      if (!fiberCache.tryDispose(fiber, 3000)) {
-        // Check memory usage every 3s while we are waiting fiber release.
-        logDebug(s"Waiting fiber to be released timeout. Fiber: $fiber")
-        removalPendingQueue.offer((fiber, fiberCache))
-        if (_pendingFiberSize.get() > maxMemory) {
-          logWarning("Fibers pending on removal use too much memory, " +
-            s"current: ${_pendingFiberSize.get()}, max: $maxMemory")
-        }
-      } else {
-        _pendingFiberSize.addAndGet(-fiberCache.size())
-        // TODO: Make log more readable
-        logDebug(s"Fiber removed successfully. Fiber: $fiber")
-      }
-      bRemoving = false
+      releaseFiberCache(fiber, fiberCache)
     }
+  }
+
+  private def releaseFiberCache(fiber: Fiber, fiberCache: FiberCache): Unit = {
+    bRemoving = true
+    logDebug(s"Removing fiber: $fiber")
+    // Block if fiber is in use.
+    if (!fiberCache.tryDispose(fiber, 3000)) {
+      // Check memory usage every 3s while we are waiting fiber release.
+      logDebug(s"Waiting fiber to be released timeout. Fiber: $fiber")
+      removalPendingQueue.offer((fiber, fiberCache))
+      if (_pendingFiberSize.get() > maxMemory) {
+        logWarning("Fibers pending on removal use too much memory, " +
+            s"current: ${_pendingFiberSize.get()}, max: $maxMemory")
+      }
+    } else {
+      _pendingFiberSize.addAndGet(-fiberCache.size())
+      // TODO: Make log more readable
+      logDebug(s"Fiber removed successfully. Fiber: $fiber")
+    }
+    bRemoving = false
   }
 }
 
