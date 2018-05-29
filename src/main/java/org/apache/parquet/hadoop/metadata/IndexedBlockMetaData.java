@@ -14,18 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.parquet.hadoop.metadata;
 
-package org.apache.spark.sql.oap
-
-import org.apache.spark.sql.execution.datasources.oap.OapMetricsManager
-import org.apache.spark.sql.oap.rpc.OapRpcManager
+import org.apache.parquet.it.unimi.dsi.fastutil.ints.IntList;
 
 /**
- * This is to hold OAP-specific xxManagers in SparkEnv, so as to bring more convenience for
- * developers
+ * IndexedBlockMetaData extends with need rowids which use by xxxIndexedReader.
  */
-class OapManager(val rpcManager: OapRpcManager, val metricsManager: OapMetricsManager) {
-  def stop(): Unit = {
-    rpcManager.stop()
+public class IndexedBlockMetaData extends OrderedBlockMetaData {
+
+  private IntList needRowIds;
+
+  public IndexedBlockMetaData(OrderedBlockMetaData orderedBlockMetaData, IntList needRowIds) {
+    super(orderedBlockMetaData.rowGroupId, orderedBlockMetaData.meta);
+    this.needRowIds = needRowIds;
+  }
+
+  public IntList getNeedRowIds() {
+    return needRowIds;
   }
 }
