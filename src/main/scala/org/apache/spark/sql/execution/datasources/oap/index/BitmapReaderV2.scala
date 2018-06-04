@@ -18,7 +18,6 @@
 package org.apache.spark.sql.execution.datasources.oap.index
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.Breaks._
 
 import org.apache.hadoop.conf.Configuration
 
@@ -26,6 +25,7 @@ import org.apache.spark.sql.execution.datasources.oap.filecache.BitmapFiber
 import org.apache.spark.sql.execution.datasources.oap.index.impl.IndexFileReaderImpl
 import org.apache.spark.sql.execution.datasources.oap.utils.{BitmapUtils, OapBitmapWrappedFiberCache}
 import org.apache.spark.sql.types.StructType
+
 
 private[oap] class BitmapReaderV2(
     fileReader: IndexFileReaderImpl,
@@ -78,12 +78,12 @@ private[oap] class BitmapReaderV2(
             val entrySize = getIdxOffset(bmOffsetListCache, 0L, idx + 1) - curIdxOffset
             val entryFiber = BitmapFiber(() => fileReader.readFiberCache(curIdxOffset, entrySize),
               fileReader.getName, BitmapIndexSectionId.entryListSection, idx)
-            new OapBitmapWrappedFiberCache(fiberCacheManager.get(entryFiber, conf))
+            new OapBitmapWrappedFiberCache(fiberCacheManager.get(entryFiber))
           })
         }
       case range if range.isNullPredicate =>
         val nullListCache =
-          new OapBitmapWrappedFiberCache(fiberCacheManager.get(bmNullListFiber, conf))
+          new OapBitmapWrappedFiberCache(fiberCacheManager.get(bmNullListFiber))
         if (nullListCache.size != 0) {
           Seq(nullListCache)
         } else {
