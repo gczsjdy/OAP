@@ -27,7 +27,6 @@ import com.google.common.cache._
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
-
 trait OapCache {
   val dataFiberSize: AtomicLong = new AtomicLong(0)
   val indexFiberSize: AtomicLong = new AtomicLong(0)

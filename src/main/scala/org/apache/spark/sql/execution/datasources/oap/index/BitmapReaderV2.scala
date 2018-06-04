@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.datasources.oap.index.impl.IndexFileReader
 import org.apache.spark.sql.execution.datasources.oap.utils.{BitmapUtils, OapBitmapWrappedFiberCache}
 import org.apache.spark.sql.types.StructType
 
-
 private[oap] class BitmapReaderV2(
     fileReader: IndexFileReaderImpl,
     intervalArray: ArrayBuffer[RangeInterval],
