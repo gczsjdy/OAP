@@ -73,6 +73,7 @@ class SimpleOapCache extends OapCache with Logging {
 
   override def get(fiber: Fiber): FiberCache = {
     val fiberCache = fiber.cache()
+    fiberCache.fiber = fiber
     incFiberCountAndSize(fiber, 1, fiberCache.size())
     fiberCache.occupy()
     // We only use fiber for once, and CacheGuardian will dispose it after release.

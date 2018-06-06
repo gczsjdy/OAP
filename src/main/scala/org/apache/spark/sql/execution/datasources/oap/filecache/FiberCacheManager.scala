@@ -60,25 +60,25 @@ private[filecache] class CacheGuardian(maxMemory: Long) extends Thread with Logg
 
   override def run(): Unit = {
     while (true) {
-      val (fiber, fiberCache) = removalPendingQueue.take()
-      releaseFiberCache(fiber, fiberCache)
+      val fiberCache = removalPendingQueue.take()._2
+      releaseFiberCache(fiberCache)
     }
   }
 
-  private def releaseFiberCache(fiber: Fiber, fiberCache: FiberCache): Unit = {
+  private def releaseFiberCache(cache: FiberCache): Unit = {
     bRemoving = true
+    val fiber = cache.fiber
     logDebug(s"Removing fiber: $fiber")
     // Block if fiber is in use.
-    if (!fiberCache.tryDispose(fiber, 3000)) {
-      // Check memory usage every 3s while we are waiting fiber release.
+    if (!cache.tryDispose()) {
       logDebug(s"Waiting fiber to be released timeout. Fiber: $fiber")
-      removalPendingQueue.offer((fiber, fiberCache))
+      removalPendingQueue.offer((fiber, cache))
       if (_pendingFiberSize.get() > maxMemory) {
         logWarning("Fibers pending on removal use too much memory, " +
             s"current: ${_pendingFiberSize.get()}, max: $maxMemory")
       }
     } else {
-      _pendingFiberSize.addAndGet(-fiberCache.size())
+      _pendingFiberSize.addAndGet(-cache.size())
       // TODO: Make log more readable
       logDebug(s"Fiber removed successfully. Fiber: $fiber")
     }
