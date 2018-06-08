@@ -22,6 +22,7 @@ import java.io.File
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
@@ -206,7 +207,7 @@ class FiberSuite extends SharedOapContext with Logging {
     val reader = new OapDataReaderV1(path.toString, m, StructType(Seq()),
       StructType(Seq()), None, requiredIds, None, OapRuntime.getOrCreate.oapMetricsManager,
       conf = configuration)
-    
+
     val it = reader.initialize()
 
     var idx = 0
