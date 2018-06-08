@@ -19,16 +19,21 @@ package org.apache.spark.sql.execution.datasources.oap.io
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+import org.apache.parquet.filter2.predicate.FilterPredicate
 import org.apache.parquet.format.CompressionCodec
 import org.apache.parquet.io.api.Binary
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Ascending
-import org.apache.spark.sql.execution.datasources.oap.{DataSourceMeta, OapFileFormat}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.filecache.DataFiberBuilder
 import org.apache.spark.sql.execution.datasources.oap.index._
-import org.apache.spark.sql.execution.datasources.oap.utils.OapIndexInfoStatusSerDe
+import org.apache.spark.sql.execution.datasources.oap.utils.{FilterHelper, OapIndexInfoStatusSerDe}
+import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.sql.oap.listener.SparkListenerOapIndexInfoUpdate
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -80,7 +85,7 @@ private[oap] class OapDataWriter(
     }
   }
 
-  private val fiberMeta = new OapDataFileMeta(
+  private val fiberMeta = new OapDataFileMetaV1(
     rowCountInEachGroup = ROW_GROUP_SIZE,
     fieldCount = schema.length,
     codec = COMPRESSION_CODEC)
@@ -187,12 +192,21 @@ private[sql] object OapIndexInfo extends Logging {
   }
 }
 
-private[oap] class OapDataReader(
+private[oap] class OapDataReaderV1(
     pathStr: String,
-    meta: DataSourceMeta,
+    m: DataSourceMeta,
+    partitionSchema: StructType,
+    requiredSchema: StructType,
     filterScanners: Option[IndexScanners],
     requiredIds: Array[Int],
-    context: Option[VectorizedContext] = None) extends Logging {
+    pushed: Option[FilterPredicate],
+    metrics: OapMetricsManager,
+    conf: Configuration,
+    enableVectorizedReader: Boolean = false,
+    parquetDataCacheEnable: Boolean = false,
+    options: Map[String, String] = Map.empty,
+    filters: Seq[Filter] = Seq.empty,
+    context: Option[VectorizedContext] = None) extends OapDataReader with Logging {
 
   import org.apache.spark.sql.execution.datasources.oap.INDEX_STAT._
 
@@ -206,14 +220,27 @@ private[oap] class OapDataReader(
   private var _totalRows: Long = 0
   private val path = new Path(pathStr)
 
-  def initialize(
-      conf: Configuration,
-      options: Map[String, String] = Map.empty,
-      filters: Seq[Filter] = Nil): OapCompletionIterator[InternalRow] = {
+  def isSkippedByFile: Boolean = {
+    if (m.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
+      val dataFile = DataFile(pathStr, m.schema, m.dataReaderClassName, conf)
+      val dataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager.get(dataFile)
+        .asInstanceOf[OapDataFileMetaV1]
+      if (filters.exists(filter => isSkippedByStatistics(
+        dataFileMeta.columnsMeta.map(_.fileStatistics).toArray, filter, m.schema))) {
+        val tot = dataFileMeta.totalRowCount()
+        metrics.updateTotalRows(tot)
+        metrics.skipForStatistic(tot)
+        return true
+      }
+    }
+    false
+  }
+
+  def initialize(): OapCompletionIterator[InternalRow] = {
     logDebug("Initializing OapDataReader...")
     // TODO how to save the additional FS operation to get the Split size
-    val fileScanner = DataFile(pathStr, meta.schema, meta.dataReaderClassName, conf)
-    if (meta.dataReaderClassName.contains("ParquetDataFile")) {
+    val fileScanner = DataFile(pathStr, m.schema, m.dataReaderClassName, conf)
+    if (m.dataReaderClassName.contains("ParquetDataFile")) {
       fileScanner.asInstanceOf[ParquetDataFile].setVectorizedContext(context)
     }
 
@@ -253,7 +280,7 @@ private[oap] class OapDataReader(
           }
 
           // Parquet reader does not support backward scan, so rowIds must be sorted.
-          if (meta.dataReaderClassName.contains("ParquetDataFile")) {
+          if (m.dataReaderClassName.contains("ParquetDataFile")) {
             rowIds.sorted
           } else {
             rowIds
@@ -277,4 +304,31 @@ private[oap] class OapDataReader(
         fullScan
     }
   }
+
+  override def read(file: PartitionedFile): Iterator[InternalRow] =
+    if (isSkippedByFile) {
+      Iterator.empty
+    } else {
+      OapIndexInfo.partitionOapIndex.put(pathStr, false)
+      FilterHelper.setFilterIfExist(conf, pushed)
+
+      val iter = initialize()
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+      val tot = totalRows()
+      metrics.updateTotalRows(tot)
+      metrics.updateIndexAndRowRead(this, tot)
+      // if enableVectorizedReader == true and parquetDataCacheEnable = false,
+      // return iter directly because of partitionValues
+      // already filled by VectorizedReader, else use original branch.
+      if (enableVectorizedReader && !parquetDataCacheEnable) {
+        iter
+      } else {
+        val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+        val joinedRow = new JoinedRow()
+        val appendPartitionColumns =
+          GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+        iter.map(d => appendPartitionColumns(joinedRow(d, file.partitionValues)))
+      }
+    }
 }

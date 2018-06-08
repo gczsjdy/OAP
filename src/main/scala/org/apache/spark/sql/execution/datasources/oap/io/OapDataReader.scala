@@ -1,0 +1,55 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.oap.io
+
+import org.apache.hadoop.fs.FSDataInputStream
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.datasources.{OapException, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion
+import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion.DataFileVersion
+import org.apache.spark.unsafe.types.UTF8String
+
+abstract class OapDataReader {
+  def read(file: PartitionedFile): Iterator[InternalRow]
+}
+
+object OapDataReader extends Logging {
+
+  def readVersion(is: FSDataInputStream, fileLen: Long): DataFileVersion = {
+    val MAGIC_VERSION_LENGTH = 4
+    val metaEnd = fileLen - 4
+
+    // seek to the position of data file meta length
+    is.seek(metaEnd)
+    val metaLength = is.readInt()
+    // read all bytes of data file meta
+    val magicBuffer = new Array[Byte](MAGIC_VERSION_LENGTH)
+    is.readFully(metaEnd - metaLength, magicBuffer)
+
+    val magic = UTF8String.fromBytes(magicBuffer).toString
+    if (! magic.contains("OAP")) {
+      throw new OapException("Not a valid Oap Data File")
+    } else if (magic == "OAP1") {
+      DataFileVersion.OAP_DATAFILE_V1
+    } else {
+      throw new OapException("Not a supported Oap Data File version")
+    }
+  }
+}

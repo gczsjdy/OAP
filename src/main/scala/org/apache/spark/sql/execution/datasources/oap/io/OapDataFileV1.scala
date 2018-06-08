@@ -32,7 +32,7 @@ import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
-private[oap] case class OapDataFile(
+private[oap] case class OapDataFileV1(
     path: String,
     schema: StructType,
     configuration: Configuration) extends DataFile {
@@ -40,15 +40,11 @@ private[oap] case class OapDataFile(
   private val dictionaries = new Array[Dictionary](schema.length)
   private val codecFactory = new CodecFactory(configuration)
   private val meta =
-    OapRuntime.getOrCreate.dataFileMetaCacheManager.get(this).asInstanceOf[OapDataFileMeta]
+    OapRuntime.getOrCreate.dataFileMetaCacheManager.get(this).asInstanceOf[OapDataFileMetaV1]
 
   def isSkippedByRowGroup(filters: Seq[Filter] = Nil, rowGroupId: Int): Boolean = {
-    if (filters.exists(filter =>
-      isSkippedByStatistics(meta.rowGroupsMeta(rowGroupId).statistics, filter, schema))) {
-      true
-    } else {
-      false
-    }
+    filters.exists(filter =>
+      isSkippedByStatistics(meta.rowGroupsMeta(rowGroupId).statistics, filter, schema))
   }
 
   private val inUseFiberCache = new Array[FiberCache](schema.length)
@@ -180,7 +176,7 @@ private[oap] case class OapDataFile(
       override def close(): Unit = {
         // To ensure if any exception happens, caches are still released after calling close()
         inUseFiberCache.indices.foreach(release)
-        OapDataFile.this.close()
+        OapDataFileV1.this.close()
       }
     }
   }
@@ -204,12 +200,12 @@ private[oap] case class OapDataFile(
     codecFactory.release()
   }
 
-  override def getDataFileMeta(): OapDataFileMeta = {
+  override def getDataFileMeta(): OapDataFileMetaV1 = {
     val p = new Path(StringUtils.unEscapeString(path))
 
     val fs = p.getFileSystem(configuration)
 
-    new OapDataFileMeta().read(fs.open(p), fs.getFileStatus(p).getLen)
+    new OapDataFileMetaV1().read(fs.open(p), fs.getFileStatus(p).getLen)
   }
 
   def totalRows(): Long = meta.totalRowCount()

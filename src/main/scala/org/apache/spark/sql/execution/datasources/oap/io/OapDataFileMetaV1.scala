@@ -29,11 +29,11 @@ import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-//  Meta Part Format
+//  OAP Data File V1 Meta Part
 //  ..
 //  Field                               Length In Byte
 //  Meta
-//    Magic                             4
+//    Magic and Version                 4
 //    Row Count In Each Row Group       4
 //    Row Count In Last Row Group       4
 //    Row Group Count                   4
@@ -234,7 +234,7 @@ private[oap] object ColumnMeta {
   }
 }
 
-private[oap] class OapDataFileMeta(
+private[oap] class OapDataFileMetaV1(
     var rowGroupsMeta: ArrayBuffer[RowGroupMeta] = new ArrayBuffer[RowGroupMeta](),
     var columnsMeta: ArrayBuffer[ColumnMeta] = new ArrayBuffer[ColumnMeta](),
     var rowCountInEachGroup: Int = 0,
@@ -245,8 +245,8 @@ private[oap] class OapDataFileMeta(
   private var _fin: FSDataInputStream = _
   private var _len: Long = 0
 
-  // Please change this value when Data File Format is changed
-  private val MAGIC = "OAP1"
+  // Magic bytes and version number
+  private val MAGIC_VERSION = "OAP1"
 
   def fin: FSDataInputStream = _fin
   def len: Long = _len
@@ -259,22 +259,22 @@ private[oap] class OapDataFileMeta(
     }
   }
 
-  def appendRowGroupMeta(meta: RowGroupMeta): OapDataFileMeta = {
+  def appendRowGroupMeta(meta: RowGroupMeta): OapDataFileMetaV1 = {
     this.rowGroupsMeta.append(meta)
     this
   }
 
-  def appendColumnMeta(meta: ColumnMeta): OapDataFileMeta = {
+  def appendColumnMeta(meta: ColumnMeta): OapDataFileMetaV1 = {
     this.columnsMeta.append(meta)
     this
   }
 
-  def withRowCountInLastGroup(count: Int): OapDataFileMeta = {
+  def withRowCountInLastGroup(count: Int): OapDataFileMetaV1 = {
     this.rowCountInLastGroup = count
     this
   }
 
-  def withGroupCount(count: Int): OapDataFileMeta = {
+  def withGroupCount(count: Int): OapDataFileMetaV1 = {
     this.groupCount = count
     this
   }
@@ -290,7 +290,7 @@ private[oap] class OapDataFileMeta(
     validateConsistency()
 
     val startPos = os.getPos
-    os.writeBytes(MAGIC)
+    os.writeBytes(MAGIC_VERSION)
     os.writeInt(this.rowCountInEachGroup)
     os.writeInt(this.rowCountInLastGroup)
     os.writeInt(this.groupCount)
@@ -305,7 +305,7 @@ private[oap] class OapDataFileMeta(
     os.writeInt((endPos - startPos).toInt)
   }
 
-  def read(is: FSDataInputStream, fileLen: Long): OapDataFileMeta = is.synchronized {
+  def read(is: FSDataInputStream, fileLen: Long): OapDataFileMetaV1 = is.synchronized {
     this._fin = is
     this._len = fileLen
 
@@ -322,10 +322,10 @@ private[oap] class OapDataFileMeta(
 
     val in = new DataInputStream(new ByteArrayInputStream(metaBytes))
 
-    val buffer = new Array[Byte](MAGIC.length)
+    val buffer = new Array[Byte](MAGIC_VERSION.length)
     in.readFully(buffer)
     val magic = UTF8String.fromBytes(buffer).toString
-    if (magic != MAGIC) {
+    if (magic != MAGIC_VERSION) {
       throw new OapException("Not a valid Oap Data File")
     }
 
