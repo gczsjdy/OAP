@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.oap.utils
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.json4s.jackson.JsonMethods._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCacheStatus
-import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileMetaV1
+import org.apache.spark.sql.execution.datasources.oap.io.{OapDataFileMeta, OapDataFileMetaV1}
 import org.apache.spark.util.collection.BitSet
 
 class CacheStatusSerDeSuite extends SparkFunSuite {
@@ -106,8 +105,8 @@ class CacheStatusSerDeSuite extends SparkFunSuite {
   }
 
   private def assertDataFileMetaEquals(
-                                        dataFileMeta1: OapDataFileMetaV1,
-                                        dataFileMeta2: OapDataFileMetaV1) {
+                                        dataFileMeta1: OapDataFileMeta,
+                                        dataFileMeta2: OapDataFileMeta) {
     assert(dataFileMeta1.rowCountInEachGroup === dataFileMeta2.rowCountInEachGroup)
     assert(dataFileMeta1.rowCountInLastGroup === dataFileMeta2.rowCountInLastGroup)
     assert(dataFileMeta1.groupCount === dataFileMeta2.groupCount)

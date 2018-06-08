@@ -213,7 +213,7 @@ class OapDataFileMetaCheck extends Properties("OapDataFileMeta") {
   }
 }
 
-class OapDataFileMetaSuite extends SparkFunSuite with Checkers {
+class OapDataFileMetaV1Suite extends SparkFunSuite with Checkers {
 
   test("Check OapDataFileMeta Read/Write") {
     check(new OapDataFileMetaCheck)

@@ -404,6 +404,7 @@ private[oap] class DataSourceMetaBuilder {
   val fileMetas = ArrayBuffer.empty[FileMeta]
   val indexMetas = ArrayBuffer.empty[IndexMeta]
   var schema: StructType = new StructType()
+  // This indicates the latest OAP data file version we use while writing (for reader)
   var dataReaderClassName: String = classOf[OapDataFileV1].getCanonicalName
 
   def addFileMeta(fileMeta: FileMeta): this.type = {

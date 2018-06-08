@@ -32,17 +32,22 @@ import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 
+private[oap] abstract class OapDataFile extends DataFile {
+  // Currently this is for a more clear class hierarchy, in the future there may be some common
+  // parts OAP data file be put here
+}
+
 private[oap] case class OapDataFileV1(
     path: String,
     schema: StructType,
-    configuration: Configuration) extends DataFile {
+    configuration: Configuration) extends OapDataFile {
 
   private val dictionaries = new Array[Dictionary](schema.length)
   private val codecFactory = new CodecFactory(configuration)
   private val meta =
     OapRuntime.getOrCreate.dataFileMetaCacheManager.get(this).asInstanceOf[OapDataFileMetaV1]
 
-  def isSkippedByRowGroup(filters: Seq[Filter] = Nil, rowGroupId: Int): Boolean = {
+  private def isSkippedByRowGroup(filters: Seq[Filter] = Nil, rowGroupId: Int): Boolean = {
     filters.exists(filter =>
       isSkippedByStatistics(meta.rowGroupsMeta(rowGroupId).statistics, filter, schema))
   }

@@ -234,14 +234,23 @@ private[oap] object ColumnMeta {
   }
 }
 
+private[oap] abstract class OapDataFileMeta extends DataFileMeta {
+  var rowGroupsMeta: ArrayBuffer[RowGroupMeta]
+  var columnsMeta: ArrayBuffer[ColumnMeta]
+  var rowCountInEachGroup: Int
+  var rowCountInLastGroup: Int
+  var groupCount: Int
+  var fieldCount: Int
+}
+
 private[oap] class OapDataFileMetaV1(
-    var rowGroupsMeta: ArrayBuffer[RowGroupMeta] = new ArrayBuffer[RowGroupMeta](),
-    var columnsMeta: ArrayBuffer[ColumnMeta] = new ArrayBuffer[ColumnMeta](),
-    var rowCountInEachGroup: Int = 0,
-    var rowCountInLastGroup: Int = 0,
-    var groupCount: Int = 0,
-    var fieldCount: Int = 0,
-    var codec: CompressionCodec = CompressionCodec.UNCOMPRESSED) extends DataFileMeta {
+    override var rowGroupsMeta: ArrayBuffer[RowGroupMeta] = new ArrayBuffer[RowGroupMeta](),
+    override var columnsMeta: ArrayBuffer[ColumnMeta] = new ArrayBuffer[ColumnMeta](),
+    override var rowCountInEachGroup: Int = 0,
+    override var rowCountInLastGroup: Int = 0,
+    override var groupCount: Int = 0,
+    override var fieldCount: Int = 0,
+    var codec: CompressionCodec = CompressionCodec.UNCOMPRESSED) extends OapDataFileMeta {
   private var _fin: FSDataInputStream = _
   private var _len: Long = 0
 
@@ -326,7 +335,7 @@ private[oap] class OapDataFileMetaV1(
     in.readFully(buffer)
     val magic = UTF8String.fromBytes(buffer).toString
     if (magic != MAGIC_VERSION) {
-      throw new OapException("Not a valid Oap Data File")
+      throw new OapException("Using incorrent OapDataFileMeta!")
     }
 
     this.rowCountInEachGroup = in.readInt()
