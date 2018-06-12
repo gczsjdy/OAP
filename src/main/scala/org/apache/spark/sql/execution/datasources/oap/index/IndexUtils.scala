@@ -31,11 +31,6 @@ import org.apache.spark.unsafe.Platform
  */
 private[oap] object IndexUtils {
 
-  def readVersion(fileReader: IndexFileReader): Option[Int] = {
-    val magicBytes = fileReader.read(0, IndexFile.VERSION_LENGTH)
-    deserializeVersion(magicBytes)
-  }
-
   def serializeVersion(versionNum: Int): Array[Byte] = {
     assert(versionNum <= 65535)
     IndexFile.VERSION_PREFIX.getBytes("UTF-8") ++

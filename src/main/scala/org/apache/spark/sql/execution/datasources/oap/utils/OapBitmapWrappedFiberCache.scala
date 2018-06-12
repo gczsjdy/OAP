@@ -92,7 +92,6 @@ private[oap] class OapBitmapWrappedFiberCache(fc: FiberCache) {
   }
 
   def release(): Unit = fc.release
-  def size(): Long = fc.size
 
   def getShort(): Short = {
     val curPos = curOffset
