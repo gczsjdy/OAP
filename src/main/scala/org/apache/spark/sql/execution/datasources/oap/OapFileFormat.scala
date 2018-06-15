@@ -473,9 +473,14 @@ private[sql] object OapFileFormat {
   val OAP_DATA_EXTENSION = ".data"
   val OAP_INDEX_EXTENSION = ".index"
   val OAP_META_FILE = ".oap.meta"
-  // Currently used OapDataFile version, which is used for writing OAP file format files
-  // Note that reading is supported for all versions' OapDataFile for backward compatibility
-  val OAP_DATA_FILE_CLASSNAME = classOf[OapDataFileV1].getCanonicalName
+  // This is used in DataSourceMeta file to indicate Parquet/OAP file format
+  // For OAP data files, the version info is written in data file header, hence various versions of
+  // OAP data file(i.e. one partition uses V1 while another uses V2) are supported in different
+  // distributed tasks
+  val OAP_DATA_FILE_CLASSNAME = classOf[OapDataFile].getCanonicalName
+  // This is used while actually reading a Parquet/OAP data file
+  val OAP_DATA_FILE_V1_CLASSNAME = classOf[OapDataFileV1].getCanonicalName
+
   val PARQUET_DATA_FILE_CLASSNAME = classOf[ParquetDataFile].getCanonicalName
 
   val COMPRESSION = "oap.compression"

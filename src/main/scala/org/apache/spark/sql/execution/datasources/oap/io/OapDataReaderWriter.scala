@@ -220,9 +220,11 @@ private[oap] class OapDataReaderV1(
   private var _totalRows: Long = 0
   private val path = new Path(pathStr)
 
+  private val dataFileClassName = OapDataReader.getDataFileClassFor(m.dataReaderClassName, this)
+
   def isSkippedByFile: Boolean = {
     if (m.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
-      val dataFile = DataFile(pathStr, m.schema, m.dataReaderClassName, conf)
+      val dataFile = DataFile(pathStr, m.schema, dataFileClassName, conf)
       val dataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager.get(dataFile)
         .asInstanceOf[OapDataFileMetaV1]
       if (filters.exists(filter => isSkippedByStatistics(
@@ -239,7 +241,7 @@ private[oap] class OapDataReaderV1(
   def initialize(): OapCompletionIterator[InternalRow] = {
     logDebug("Initializing OapDataReader...")
     // TODO how to save the additional FS operation to get the Split size
-    val fileScanner = DataFile(pathStr, m.schema, m.dataReaderClassName, conf)
+    val fileScanner = DataFile(pathStr, m.schema, dataFileClassName, conf)
     if (m.dataReaderClassName.contains("ParquetDataFile")) {
       fileScanner.asInstanceOf[ParquetDataFile].setVectorizedContext(context)
     }

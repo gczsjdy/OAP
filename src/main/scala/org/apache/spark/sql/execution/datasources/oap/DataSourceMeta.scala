@@ -27,7 +27,6 @@ import org.apache.hadoop.fs._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileV1
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ShutdownHookManager
 
@@ -340,6 +339,7 @@ private[oap] case class DataSourceMeta(
     @transient fileMetas: Array[FileMeta],
     indexMetas: Array[IndexMeta],
     schema: StructType,
+    // Indicate Parquet/OAP data file, not containing versions information
     dataReaderClassName: String,
     @transient fileHeader: FileHeader) extends Serializable {
 
@@ -404,8 +404,8 @@ private[oap] class DataSourceMetaBuilder {
   val fileMetas = ArrayBuffer.empty[FileMeta]
   val indexMetas = ArrayBuffer.empty[IndexMeta]
   var schema: StructType = new StructType()
-  // This indicates the latest OAP data file version we use while writing (for reader)
-  var dataReaderClassName: String = classOf[OapDataFileV1].getCanonicalName
+  // This won't contain version info, refer to [[DataSourceMeta]]
+  var dataReaderClassName: String = OapFileFormat.OAP_DATA_FILE_CLASSNAME
 
   def addFileMeta(fileMeta: FileMeta): this.type = {
     fileMetas += fileMeta

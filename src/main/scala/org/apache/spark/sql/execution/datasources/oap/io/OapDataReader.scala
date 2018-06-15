@@ -23,6 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{OapException, PartitionedFile}
 import org.apache.spark.sql.execution.datasources.oap.INDEX_STAT._
+import org.apache.spark.sql.execution.datasources.oap.OapFileFormat
 import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion
 import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion.DataFileVersion
 import org.apache.spark.unsafe.types.UTF8String
@@ -50,12 +51,24 @@ object OapDataReader extends Logging {
     is.readFully(metaEnd - metaLength, magicBuffer)
 
     val magic = UTF8String.fromBytes(magicBuffer).toString
-    if (! magic.contains("OAP")) {
-      throw new OapException("Not a valid Oap Data File")
-    } else if (magic == "OAP1") {
-      DataFileVersion.OAP_DATAFILE_V1
-    } else {
-      throw new OapException("Not a supported Oap Data File version")
+    magic match {
+      case m if ! m.contains("OAP") => throw new OapException("Not a valid Oap Data File")
+      case m if m == "OAP1" => DataFileVersion.OAP_DATAFILE_V1
+      case _ => throw new OapException("Not a supported Oap Data File version")
+    }
+  }
+
+  def getDataFileClassFor(dataReaderClassFromDataSourceMeta: String, reader: OapDataReader): String
+    = {
+    dataReaderClassFromDataSourceMeta match {
+      case c if c == OapFileFormat.PARQUET_DATA_FILE_CLASSNAME => c
+      case c if c == OapFileFormat.OAP_DATA_FILE_CLASSNAME =>
+        reader match {
+          case r: OapDataReaderV1 => OapFileFormat.OAP_DATA_FILE_V1_CLASSNAME
+          case _ => throw new OapException(s"Undefined connection for $reader")
+        }
+      case _ => throw new OapException(
+        s"Undefined data reader class name $dataReaderClassFromDataSourceMeta")
     }
   }
 }
