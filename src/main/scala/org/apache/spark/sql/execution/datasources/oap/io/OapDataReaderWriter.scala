@@ -213,8 +213,8 @@ private[oap] class OapDataReaderV1(
   private var _rowsReadWhenHitIndex: Option[Long] = None
   private var _indexStat = MISS_INDEX
 
-  def rowsReadByIndex: Option[Long] = _rowsReadWhenHitIndex
-  def indexStat: INDEX_STAT = _indexStat
+  override def rowsReadByIndex: Option[Long] = _rowsReadWhenHitIndex
+  override def indexStat: INDEX_STAT = _indexStat
 
   def totalRows(): Long = _totalRows
   private var _totalRows: Long = 0

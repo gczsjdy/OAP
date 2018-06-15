@@ -22,12 +22,18 @@ import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.{OapException, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.oap.INDEX_STAT._
 import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion
 import org.apache.spark.sql.execution.datasources.oap.io.OapDataFileProperties.DataFileVersion.DataFileVersion
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class OapDataReader {
   def read(file: PartitionedFile): Iterator[InternalRow]
+
+  // The two following fields have to be defined by certain versions of OapDataReader for use in
+  // [[OapMetricsManager]]
+  def rowsReadByIndex: Option[Long]
+  def indexStat: INDEX_STAT
 }
 
 object OapDataReader extends Logging {
