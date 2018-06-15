@@ -25,9 +25,7 @@ import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream}
 import org.apache.parquet.column.statistics._
 import org.apache.parquet.format.{CompressionCodec, Encoding}
 
-import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 //  OAP Data File V1 Meta Part
 //  ..
@@ -331,12 +329,8 @@ private[oap] class OapDataFileMetaV1(
 
     val in = new DataInputStream(new ByteArrayInputStream(metaBytes))
 
-    val buffer = new Array[Byte](MAGIC_VERSION.length)
-    in.readFully(buffer)
-    val magic = UTF8String.fromBytes(buffer).toString
-    if (magic != MAGIC_VERSION) {
-      throw new OapException("Using incorrent OapDataFileMeta!")
-    }
+    // Magic number and version has already been checked
+    in.skipBytes(MAGIC_VERSION.length)
 
     this.rowCountInEachGroup = in.readInt()
     this.rowCountInLastGroup = in.readInt()
