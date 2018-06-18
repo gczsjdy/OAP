@@ -39,7 +39,6 @@ import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
 
 /**
  * ParquetDataFile use xxRecordReader read Parquet Data File,
@@ -239,9 +238,7 @@ private[oap] case class ParquetDataFile(
     footer.getBlocks.asScala.iterator.flatMap { rowGroupMeta =>
       val orderedBlockMetaData = rowGroupMeta.asInstanceOf[OrderedBlockMetaData]
       val rows = buildBatchColumnFromCache(orderedBlockMetaData, conf, requiredColumnIds)
-      val iter = rows.toIterator
-      CompletionIterator[InternalRow, Iterator[InternalRow]](
-        iter, requiredColumnIds.foreach(release))
+      rows.toIterator
     }
   }
 
@@ -253,10 +250,7 @@ private[oap] case class ParquetDataFile(
     footer.getBlocks.asScala.iterator.flatMap { rowGroupMeta =>
       val indexedBlockMetaData = rowGroupMeta.asInstanceOf[IndexedBlockMetaData]
       val rows = buildBatchColumnFromCache(indexedBlockMetaData, conf, requiredColumnIds)
-      val iter = indexedBlockMetaData.getNeedRowIds.iterator.
-        asScala.map(rowId => rows.moveToRow(rowId))
-      CompletionIterator[InternalRow, Iterator[InternalRow]](
-        iter, requiredColumnIds.foreach(release))
+      indexedBlockMetaData.getNeedRowIds.iterator.asScala.map(rowId => rows.moveToRow(rowId))
     }
   }
 

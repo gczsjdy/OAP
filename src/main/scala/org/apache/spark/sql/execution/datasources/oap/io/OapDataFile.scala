@@ -31,8 +31,6 @@ import org.apache.spark.sql.execution.datasources.oap.filecache._
 import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
-
 
 private[oap] case class OapDataFile(
     path: String,
@@ -172,12 +170,11 @@ private[oap] case class OapDataFile(
           if (groupId < meta.groupCount - 1) meta.rowCountInEachGroup else meta.rowCountInLastGroup
         rows.reset(rowCount, columns)
 
-        val iter = groupIdToRowIds match {
+        groupIdToRowIds match {
           case Some(map) =>
             map(groupId).iterator.map(rowId => rows.moveToRow(rowId % meta.rowCountInEachGroup))
           case None => rows.toIterator
         }
-        CompletionIterator[InternalRow, Iterator[InternalRow]](iter, requiredIds.foreach(release))
     }
     new OapIterator[InternalRow](iterator) {
       override def close(): Unit = {
