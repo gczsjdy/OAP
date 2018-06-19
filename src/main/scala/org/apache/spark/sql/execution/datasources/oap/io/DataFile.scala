@@ -52,8 +52,17 @@ abstract class DataFile {
   }
 }
 
+// An Iterator automatically calling close() after iterations of all items
 private[oap] class OapIterator[T](inner: Iterator[T]) extends Iterator[T] with Closeable {
-  override def hasNext: Boolean = inner.hasNext
+  private[this] var completed = false
+  override def hasNext: Boolean = {
+    val r = inner.hasNext
+    if (!r && !completed) {
+      completed = true
+      close()
+    }
+    r
+  }
   override def next(): T = inner.next()
   override def close(): Unit = {}
 }
