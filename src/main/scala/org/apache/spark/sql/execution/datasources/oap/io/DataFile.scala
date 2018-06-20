@@ -52,14 +52,17 @@ abstract class DataFile {
   }
 }
 
-// An Iterator automatically calling close() after iterations of all items
-private[oap] class OapIterator[T](inner: Iterator[T]) extends Iterator[T] with Closeable {
+// An OAP wrapped iterator calling completionFunction() automatically after iterations of all items
+// Also, it contains a close interface to do cleaning even if tasks fail
+private[oap] class OapIterator[T](inner: Iterator[T], completionFunction: => Unit = {}) extends
+    Iterator[T] with Closeable {
+
   private[this] var completed = false
   override def hasNext: Boolean = {
     val r = inner.hasNext
     if (!r && !completed) {
       completed = true
-      close()
+      completionFunction
     }
     r
   }

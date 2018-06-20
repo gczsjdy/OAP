@@ -176,7 +176,7 @@ private[oap] case class OapDataFile(
           case None => rows.toIterator
         }
     }
-    new OapIterator[InternalRow](iterator) {
+    new OapIterator[InternalRow](iterator, inUseFiberCache.indices.foreach(release)) {
       override def close(): Unit = {
         // To ensure if any exception happens, caches are still released after calling close()
         inUseFiberCache.indices.foreach(release)

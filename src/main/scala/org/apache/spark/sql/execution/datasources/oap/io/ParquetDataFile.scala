@@ -154,7 +154,7 @@ private[oap] case class ParquetDataFile(
       case Some(ids) => buildIndexedIterator(conf, requiredColumnIds, ids)
       case None => buildFullScanIterator(conf, requiredColumnIds)
     }
-    new OapIterator[InternalRow](iterator) {
+    new OapIterator[InternalRow](iterator, requiredColumnIds.foreach(release)) {
       override def close(): Unit = {
         // To ensure if any exception happens, caches are still released after calling close()
         inUseFiberCache.indices.foreach(release)
