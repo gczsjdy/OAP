@@ -40,9 +40,10 @@ abstract class DataFile {
 
   def getDataFileMeta(): DataFileMeta
   def cache(groupId: Int, fiberId: Int): FiberCache
-  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil): OapIterator[InternalRow]
+  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil)
+    : OapCompletionIterator[InternalRow]
   def iteratorWithRowIds(requiredIds: Array[Int], rowIds: Array[Int], filters: Seq[Filter] = Nil)
-    : OapIterator[InternalRow]
+    : OapCompletionIterator[InternalRow]
 
   def totalRows(): Long
   override def hashCode(): Int = path.hashCode
@@ -53,9 +54,11 @@ abstract class DataFile {
 }
 
 // An OAP wrapped iterator calling completionFunction() automatically after iterations of all items
-// Also, it contains a close interface to do cleaning even if tasks fail
-private[oap] class OapIterator[T](inner: Iterator[T], completionFunction: => Unit = {}) extends
-    Iterator[T] with Closeable {
+// Also, it contains a close interface to do cleaning(extra listener is needed) if tasks fail
+// Note that completionFunction & close are slightly different, the latter one contains something
+// you do not wish to clean immediately after the iteration
+private[oap] class OapCompletionIterator[T](inner: Iterator[T], completionFunction: => Unit)
+    extends Iterator[T] with Closeable {
 
   private[this] var completed = false
   override def hasNext: Boolean = {

@@ -142,7 +142,7 @@ private[oap] case class OapDataFile(
       conf: Configuration,
       requiredIds: Array[Int],
       rowIds: Option[Array[Int]],
-      filters: Seq[Filter]): OapIterator[InternalRow] = {
+      filters: Seq[Filter]): OapCompletionIterator[InternalRow] = {
     val rows = new BatchColumn()
     val groupIdToRowIds = rowIds.map(_.groupBy(rowId => rowId / meta.rowCountInEachGroup))
     val groupIds = groupIdToRowIds.map(_.keys).getOrElse(0 until meta.groupCount)
@@ -176,7 +176,7 @@ private[oap] case class OapDataFile(
           case None => rows.toIterator
         }
     }
-    new OapIterator[InternalRow](iterator, inUseFiberCache.indices.foreach(release)) {
+    new OapCompletionIterator[InternalRow](iterator, inUseFiberCache.indices.foreach(release)) {
       override def close(): Unit = {
         // To ensure if any exception happens, caches are still released after calling close()
         inUseFiberCache.indices.foreach(release)
@@ -186,7 +186,8 @@ private[oap] case class OapDataFile(
   }
 
   // full file scan
-  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
+  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil)
+    : OapCompletionIterator[InternalRow] = {
     buildIterator(configuration, requiredIds, rowIds = None, filters)
   }
 
@@ -194,7 +195,7 @@ private[oap] case class OapDataFile(
   def iteratorWithRowIds(
       requiredIds: Array[Int],
       rowIds: Array[Int],
-      filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
+      filters: Seq[Filter] = Nil): OapCompletionIterator[InternalRow] = {
     buildIterator(configuration, requiredIds, Some(rowIds), filters)
   }
 

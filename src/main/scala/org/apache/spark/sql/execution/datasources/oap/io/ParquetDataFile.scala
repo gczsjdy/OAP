@@ -149,12 +149,12 @@ private[oap] case class ParquetDataFile(
   private def buildIterator(
        conf: Configuration,
        requiredColumnIds: Array[Int],
-       rowIds: Option[Array[Int]]): OapIterator[InternalRow] = {
+       rowIds: Option[Array[Int]]): OapCompletionIterator[InternalRow] = {
     val iterator = rowIds match {
       case Some(ids) => buildIndexedIterator(conf, requiredColumnIds, ids)
       case None => buildFullScanIterator(conf, requiredColumnIds)
     }
-    new OapIterator[InternalRow](iterator, requiredColumnIds.foreach(release)) {
+    new OapCompletionIterator[InternalRow](iterator, requiredColumnIds.foreach(release)) {
       override def close(): Unit = {
         // To ensure if any exception happens, caches are still released after calling close()
         inUseFiberCache.indices.foreach(release)
@@ -162,7 +162,8 @@ private[oap] case class ParquetDataFile(
     }
   }
 
-  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
+  def iterator(requiredIds: Array[Int], filters: Seq[Filter] = Nil)
+    : OapCompletionIterator[InternalRow] = {
     addRequestSchemaToConf(configuration, requiredIds)
     context match {
       case Some(c) =>
@@ -186,9 +187,9 @@ private[oap] case class ParquetDataFile(
   def iteratorWithRowIds(
       requiredIds: Array[Int],
       rowIds: Array[Int],
-      filters: Seq[Filter] = Nil): OapIterator[InternalRow] = {
+      filters: Seq[Filter] = Nil): OapCompletionIterator[InternalRow] = {
     if (rowIds == null || rowIds.length == 0) {
-      new OapIterator(Iterator.empty)
+      new OapCompletionIterator(Iterator.empty, {})
     } else {
       addRequestSchemaToConf(configuration, requiredIds)
       context match {
@@ -214,7 +215,7 @@ private[oap] case class ParquetDataFile(
   private def initRecordReader(reader: RecordReader[UnsafeRow]) = {
     reader.initialize()
     val iterator = new FileRecordReaderIterator[UnsafeRow](reader)
-    new OapIterator[InternalRow](iterator) {
+    new OapCompletionIterator[InternalRow](iterator, {}) {
       override def close(): Unit = iterator.close()
     }
   }
@@ -226,7 +227,7 @@ private[oap] case class ParquetDataFile(
       reader.enableReturningBatches()
     }
     val iterator = new FileRecordReaderIterator(reader)
-    new OapIterator[InternalRow](iterator.asInstanceOf[Iterator[InternalRow]]) {
+    new OapCompletionIterator[InternalRow](iterator.asInstanceOf[Iterator[InternalRow]], {}) {
       override def close(): Unit = iterator.close()
     }
   }
