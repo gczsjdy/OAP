@@ -194,7 +194,7 @@ private[sql] object OapIndexInfo extends Logging {
 
 private[oap] class OapDataReaderV1(
     pathStr: String,
-    m: DataSourceMeta,
+    meta: DataSourceMeta,
     partitionSchema: StructType,
     requiredSchema: StructType,
     filterScanners: Option[IndexScanners],
@@ -220,15 +220,15 @@ private[oap] class OapDataReaderV1(
   private var _totalRows: Long = 0
   private val path = new Path(pathStr)
 
-  private val dataFileClassName = OapDataReader.getDataFileClassFor(m.dataReaderClassName, this)
+  private val dataFileClassName = OapDataReader.getDataFileClassFor(meta.dataReaderClassName, this)
 
   def isSkippedByFile: Boolean = {
-    if (m.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
-      val dataFile = DataFile(pathStr, m.schema, dataFileClassName, conf)
+    if (meta.dataReaderClassName == OapFileFormat.OAP_DATA_FILE_CLASSNAME) {
+      val dataFile = DataFile(pathStr, meta.schema, dataFileClassName, conf)
       val dataFileMeta = OapRuntime.getOrCreate.dataFileMetaCacheManager.get(dataFile)
         .asInstanceOf[OapDataFileMetaV1]
       if (filters.exists(filter => isSkippedByStatistics(
-        dataFileMeta.columnsMeta.map(_.fileStatistics).toArray, filter, m.schema))) {
+        dataFileMeta.columnsMeta.map(_.fileStatistics).toArray, filter, meta.schema))) {
         val tot = dataFileMeta.totalRowCount()
         metrics.updateTotalRows(tot)
         metrics.skipForStatistic(tot)
@@ -241,8 +241,8 @@ private[oap] class OapDataReaderV1(
   def initialize(): OapCompletionIterator[InternalRow] = {
     logDebug("Initializing OapDataReader...")
     // TODO how to save the additional FS operation to get the Split size
-    val fileScanner = DataFile(pathStr, m.schema, dataFileClassName, conf)
-    if (m.dataReaderClassName.contains("ParquetDataFile")) {
+    val fileScanner = DataFile(pathStr, meta.schema, dataFileClassName, conf)
+    if (meta.dataReaderClassName.contains("ParquetDataFile")) {
       fileScanner.asInstanceOf[ParquetDataFile].setVectorizedContext(context)
     }
 
@@ -282,7 +282,7 @@ private[oap] class OapDataReaderV1(
           }
 
           // Parquet reader does not support backward scan, so rowIds must be sorted.
-          if (m.dataReaderClassName.contains("ParquetDataFile")) {
+          if (meta.dataReaderClassName.contains("ParquetDataFile")) {
             rowIds.sorted
           } else {
             rowIds
