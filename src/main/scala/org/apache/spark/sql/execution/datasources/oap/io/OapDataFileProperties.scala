@@ -33,6 +33,9 @@ private[oap] object OapDataFileProperties {
 
     type DataFileVersion = Value
 
+    // For every new version, need add pattern match in [[OapFileFormat]] and
+    // [[OapDataReader]] for reading
+    // For the mainly supported(used while writing) new version, need update [[OapDataWriter]]
     val OAP_DATAFILE_V1: DataFileVersion = Value(1, "v1")
 
     // Same to Enumeration.withName. But re-write the Exception message
