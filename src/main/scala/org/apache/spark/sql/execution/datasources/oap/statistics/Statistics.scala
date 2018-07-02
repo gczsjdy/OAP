@@ -76,7 +76,7 @@ abstract class StatisticsWriter(schema: StructType, conf: Configuration) {
   /**
    * Statistics write function, by default, only a Statistics id should be
    * written into the writer.
- *
+   *
    * @param writer IndexOutputWrite, where to write the information
    * @param sortedKeys sorted keys stored related to this statistics
    * @return number of bytes written in writer

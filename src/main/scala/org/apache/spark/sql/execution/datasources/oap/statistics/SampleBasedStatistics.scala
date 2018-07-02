@@ -23,7 +23,6 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.oap.Key
@@ -76,7 +75,7 @@ private[oap] class SampleBasedStatisticsReader(
 }
 
 private[oap] class SampleBasedStatisticsWriter(schema: StructType, conf: Configuration)
-  extends StatisticsWriter(schema, conf) with Logging {
+  extends StatisticsWriter(schema, conf) {
   override val id: Int = StatisticsType.TYPE_SAMPLE_BASE
 
   var rowCount = 0
