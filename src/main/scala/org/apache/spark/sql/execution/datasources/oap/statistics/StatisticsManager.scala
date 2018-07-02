@@ -75,8 +75,14 @@ class StatisticsWriteManager {
   // but for SampleBase and PartByValue, this is needed
   private lazy val keys = {
     val taskContext = TaskContext.get()
-    val sorter = new OapExternalSorter[Key, Int, Int](
-      taskContext, Some(aggregator), Some(ordering))
+    val sorter = new OapExternalSorter[Key, Int, Int](taskContext, Some(aggregator), Some(ordering))
+    taskContext.addTaskCompletionListener(_ => sorter.stop())
+    sorter
+  }
+
+  private lazy val keys2 = {
+    val taskContext = TaskContext.get()
+    val sorter = new OapExternalSorter[Key, Int, Int](taskContext, Some(aggregator), Some(ordering))
     taskContext.addTaskCompletionListener(_ => sorter.stop())
     sorter
   }
@@ -105,6 +111,7 @@ class StatisticsWriteManager {
     }
     val whatever: Int = 0
     keys.insert(key, whatever)
+    keys2.insert(key, whatever)
     stats.foreach(_.addOapKey(key))
   }
 
@@ -121,11 +128,18 @@ class StatisticsWriteManager {
       offset += 4
     }
 
-    // each item of keys iterator is a Tuple2(Key, occurTimes)
     val sortedKeys = new SortedKeys(keys.iterator.asInstanceOf[Iterator[(Key, Int)]])
+    val sortedKeys2 = new SortedKeys(keys2.iterator.asInstanceOf[Iterator[(Key, Int)]])
 
     stats.foreach { stat =>
-      val off = stat.write(out, sortedKeys)
+      var off = 0
+      if (stat.isInstanceOf[SampleBasedStatisticsWriter]) {
+        off = stat.write(out, sortedKeys)
+      } else if (stat.isInstanceOf[PartByValueStatisticsWriter]) {
+        off = stat.write(out, sortedKeys2)
+      } else {
+        stat.write(out, null)
+      }
       assert(off >= 0)
       offset += off
     }
