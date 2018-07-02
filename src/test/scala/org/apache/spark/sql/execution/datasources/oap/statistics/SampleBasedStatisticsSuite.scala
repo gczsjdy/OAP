@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.oap.statistics
 
 import java.io.ByteArrayOutputStream
 
-import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
@@ -34,7 +33,7 @@ class SampleBasedStatisticsSuite extends StatisticsTest {
 
   class TestSampleWriter(schema: StructType)
     extends SampleBasedStatisticsWriter(schema, new Configuration()) {
-    override def takeSample(keys: ArrayBuffer[Key], size: Int): Array[Key] = keys.take(size).toArray
+    override def takeSample(keys: Iterator[Key], size: Int): Array[Key] = keys.take(size).toArray
     def getSampleArray: Array[Key] = sampleArray
   }
 
@@ -46,7 +45,8 @@ class SampleBasedStatisticsSuite extends StatisticsTest {
     val keys = (1 to 300).map(i => rowGen(i)).toArray // keys needs to be sorted
 
     val testSample = new TestSampleWriter(schema)
-    testSample.write(out, keys.to[ArrayBuffer])
+    keys.foreach(testSample.addOapKey(_))
+    testSample.write(out, keys.toIterator)
 
     var offset = 0
     val fiber = wrapToFiberCache(out)
@@ -94,7 +94,8 @@ class SampleBasedStatisticsSuite extends StatisticsTest {
     val keys = Random.shuffle(1 to 300).map(i => rowGen(i)).toArray
 
     val sampleWrite = new TestSampleWriter(schema)
-    sampleWrite.write(out, keys.to[ArrayBuffer])
+    keys.foreach(sampleWrite.addOapKey(_))
+    sampleWrite.write(out, keys.toIterator)
 
     val fiber = wrapToFiberCache(out)
 
@@ -115,7 +116,8 @@ class SampleBasedStatisticsSuite extends StatisticsTest {
     val dummyEnd = new JoinedRow(InternalRow(300), IndexScanner.DUMMY_KEY_END)
 
     val sampleWrite = new TestSampleWriter(schema)
-    sampleWrite.write(out, keys.to[ArrayBuffer])
+    keys.foreach(sampleWrite.addOapKey(_))
+    sampleWrite.write(out, keys.toIterator)
 
     val fiber = wrapToFiberCache(out)
 

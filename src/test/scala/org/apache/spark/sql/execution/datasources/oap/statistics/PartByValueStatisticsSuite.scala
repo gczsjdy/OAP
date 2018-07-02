@@ -55,7 +55,7 @@ class PartByValueStatisticsSuite extends StatisticsTest {
     val keys = (1 to 300).map(i => rowGen(i)).toArray // keys needs to be sorted
 
     val testPartByValueWriter = new TestPartByValueWriter(schema)
-    testPartByValueWriter.write(out, keys.to[ArrayBuffer])
+    testPartByValueWriter.write(out, keys.toIterator)
 
     var offset = 0
     val fiber = wrapToFiberCache(out)
@@ -116,7 +116,7 @@ class PartByValueStatisticsSuite extends StatisticsTest {
     val keys = (1 to 300).map(i => rowGen(i)).toArray // keys needs to be sorted
 
     val partByValueWrite = new TestPartByValueWriter(schema)
-    partByValueWrite.write(out, keys.to[ArrayBuffer])
+    partByValueWrite.write(out, keys.toIterator)
 
     val fiber = wrapToFiberCache(out)
 
@@ -143,7 +143,7 @@ class PartByValueStatisticsSuite extends StatisticsTest {
     val dummyEnd = new JoinedRow(InternalRow(300), IndexScanner.DUMMY_KEY_END)
 
     val partByValueWrite = new TestPartByValueWriter(schema)
-    partByValueWrite.write(out, keys.to[ArrayBuffer])
+    partByValueWrite.write(out, keys.toIterator)
 
     val fiber = wrapToFiberCache(out)
 

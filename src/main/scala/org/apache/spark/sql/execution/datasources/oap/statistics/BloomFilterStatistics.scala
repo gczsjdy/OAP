@@ -127,7 +127,7 @@ private[oap] class BloomFilterStatisticsWriter(
     projectors.foreach(p => bfIndex.addValue(p(key).getBytes))
   }
 
-  override def write(writer: OutputStream, sortedKeys: ArrayBuffer[Key]): Int = {
+  override def write(writer: OutputStream, sortedKeys: Iterator[Key]): Int = {
     var offset = super.write(writer, sortedKeys)
 
     // Bloom filter index file format:

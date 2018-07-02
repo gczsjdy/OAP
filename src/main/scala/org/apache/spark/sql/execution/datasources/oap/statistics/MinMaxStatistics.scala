@@ -104,7 +104,7 @@ private[oap] class MinMaxStatisticsWriter(
     }
   }
 
-  override def write(writer: OutputStream, sortedKeys: ArrayBuffer[Key]): Int = {
+  override def write(writer: OutputStream, sortedKeys: Iterator[Key]): Int = {
     var offset = super.write(writer, sortedKeys)
     if (min != null) {
       val tempWriter = new ByteArrayOutputStream()

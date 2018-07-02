@@ -23,6 +23,7 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.oap.Key
@@ -75,8 +76,10 @@ private[oap] class SampleBasedStatisticsReader(
 }
 
 private[oap] class SampleBasedStatisticsWriter(schema: StructType, conf: Configuration)
-  extends StatisticsWriter(schema, conf) {
+  extends StatisticsWriter(schema, conf) with Logging {
   override val id: Int = StatisticsType.TYPE_SAMPLE_BASE
+
+  var rowCount = 0
 
   lazy val sampleRate: Double = conf.getDouble(
     OapConf.OAP_STATISTICS_SAMPLE_RATE.key, OapConf.OAP_STATISTICS_SAMPLE_RATE.defaultValue.get)
@@ -87,6 +90,10 @@ private[oap] class SampleBasedStatisticsWriter(schema: StructType, conf: Configu
 
   protected var sampleArray: Array[Key] = _
 
+  override def addOapKey(key: Key): Unit = {
+    rowCount += 1
+  }
+
   // SampleBasedStatistics file structure
   // statistics_id        4 Bytes, Int, specify the [[Statistic]] type
   // sample_size          4 Bytes, Int, number of UnsafeRow
@@ -96,10 +103,9 @@ private[oap] class SampleBasedStatisticsWriter(schema: StructType, conf: Configu
   // | unsafeRow-3 sizeInBytes | unsafeRow-3 content |   (4 + u3_sizeInBytes) Bytes, unsafeRow-3
   // ...
   // | unsafeRow-(sample_size) sizeInBytes | unsafeRow-(sample_size) content |
-  override def write(writer: OutputStream, sortedKeys: ArrayBuffer[Key]): Int = {
+  override def write(writer: OutputStream, sortedKeys: Iterator[Key]): Int = {
     var offset = super.write(writer, sortedKeys)
-    val size = math.max(
-      (sortedKeys.size * sampleRate).toInt, math.min(minSampleSize, sortedKeys.size))
+    val size = math.max((rowCount * sampleRate).toInt, math.min(minSampleSize, rowCount))
     sampleArray = takeSample(sortedKeys, size)
 
     IndexUtils.writeInt(writer, size)
@@ -115,6 +121,22 @@ private[oap] class SampleBasedStatisticsWriter(schema: StructType, conf: Configu
     offset
   }
 
-  protected def takeSample(keys: ArrayBuffer[InternalRow], size: Int): Array[InternalRow] =
-    Random.shuffle(keys.indices.toList).take(size).map(keys(_)).toArray
+  protected def takeSample(keys: Iterator[InternalRow], size: Int): Array[InternalRow] = {
+    val indices = Random.shuffle((0 until rowCount).toList).take(size).toArray
+    var i = 0
+    def getItemsFromIter(keys: Iterator[InternalRow], indices: Array[Int]): Array[InternalRow] = {
+      val took = ArrayBuffer[InternalRow]()
+      for (key <- keys.zipWithIndex) {
+        if (i >= indices.length) {
+          return took.toArray
+        }
+        if (key._2 == indices(i)) {
+          took += key._1
+          i += 1
+        }
+      }
+      took.toArray
+    }
+    getItemsFromIter(keys, indices)
+  }
 }

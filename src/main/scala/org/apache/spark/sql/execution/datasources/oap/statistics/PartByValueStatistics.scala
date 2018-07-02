@@ -158,7 +158,7 @@ private[oap] class PartByValueStatisticsWriter(schema: StructType, conf: Configu
 
   protected lazy val metas: ArrayBuffer[PartedByValueMeta] = new ArrayBuffer[PartedByValueMeta]()
 
-  override def write(writer: OutputStream, sortedKeys: ArrayBuffer[Key]): Int = {
+  override def write(writer: OutputStream, sortedKeys: Iterator[Key]): Int = {
     var offset = super.write(writer, sortedKeys)
     val hashMap = new java.util.HashMap[Key, Int]()
     val uniqueKeys: ArrayBuffer[Key] = new ArrayBuffer[Key]()

@@ -23,12 +23,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 
+import org.apache.spark.{Aggregator, TaskContext}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.execution.datasources.oap.Key
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberCache
 import org.apache.spark.sql.execution.datasources.oap.index._
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.collection.OapExternalSorter
 
 /**
  * Statistics write:
@@ -43,10 +45,22 @@ class StatisticsWriteManager {
   protected var stats: Array[StatisticsWriter] = _
   protected var schema: StructType = _
 
+  private val combiner = (_: Int) => 0
+  private val merger = (c: Int, _: Int) => c + 1
+  private val mergeCombiner = (c1: Int, c2: Int) => c1 + c2
+  private val aggregator =
+    new Aggregator[Key, Int, Int](combiner, merger, mergeCombiner)
+
   // share key store for all statistics
   // for MinMax and BloomFilter, this is not necessary
   // but for SampleBase and PartByValue, this is needed
-  protected var content: ArrayBuffer[Key] = _
+  private lazy val keys = {
+    val taskContext = TaskContext.get()
+    val sorter = new OapExternalSorter[Key, Int, Int](
+      taskContext, Some(aggregator), Some(ordering))
+    taskContext.addTaskCompletionListener(_ => sorter.stop())
+    sorter
+  }
 
   @transient private lazy val ordering = GenerateOrdering.create(schema)
 
@@ -63,7 +77,6 @@ class StatisticsWriteManager {
       case StatisticsType(st) => st(s, conf)
       case t => throw new UnsupportedOperationException(s"non-supported statistic type $t")
     }
-    content = new ArrayBuffer[Key]()
   }
 
   def addOapKey(key: Key): Unit = {
@@ -71,7 +84,8 @@ class StatisticsWriteManager {
       // stats info does not collect null keys
       return
     }
-    content.append(key)
+    val whatever: Int = 0
+    keys.insert(key, whatever)
     stats.foreach(_.addOapKey(key))
   }
 
@@ -88,7 +102,27 @@ class StatisticsWriteManager {
       offset += 4
     }
 
-    val sortedKeys = sortKeys
+    class SortedKeys(sortedKeysWithOccurTimes: Iterator[(Key, Int)]) extends Iterator[Key] {
+
+      var times: Int = _
+      var current: Key = _
+
+      override def hasNext: Boolean = sortedKeysWithOccurTimes.hasNext || times != 0
+
+      override def next(): Key = {
+        if (times == 0) {
+          val tuple = sortedKeysWithOccurTimes.next()
+          current = tuple._1
+          times = tuple._2
+        }
+        times -= 1
+        current
+      }
+    }
+
+    // each item of keys iterator is a Tuple2(Key, occurTimes)
+    val sortedKeys = new SortedKeys(keys.iterator.asInstanceOf[Iterator[(Key, Int)]])
+
     stats.foreach { stat =>
       val off = stat.write(out, sortedKeys)
       assert(off >= 0)
@@ -97,7 +131,6 @@ class StatisticsWriteManager {
     offset
   }
 
-  private def sortKeys = content.sortWith((l, r) => ordering.compare(l, r) < 0)
 }
 
 object StatisticsManager {

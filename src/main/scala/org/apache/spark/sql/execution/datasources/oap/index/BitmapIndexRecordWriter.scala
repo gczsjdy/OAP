@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.oap.index
 
-import java.io.{ByteArrayOutputStream, DataOutput, DataOutputStream, OutputStream}
+import java.io.{ByteArrayOutputStream, DataOutputStream, OutputStream}
 
-import scala.collection.immutable
-import scala.collection.mutable
+import scala.collection.{immutable, mutable}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.{RecordWriter, TaskAttemptContext}
