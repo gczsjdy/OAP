@@ -121,8 +121,8 @@ private[oap] class SampleBasedStatisticsWriter(schema: StructType, conf: Configu
     offset
   }
 
-  protected def takeSample(keys: Iterator[InternalRow], size: Int): Array[InternalRow] = {
-    val indices = Random.shuffle((0 until rowCount).toList).take(size).toArray
+  private[statistics] def takeSample(keys: Iterator[InternalRow], size: Int): Array[InternalRow] = {
+    val indices = Random.shuffle((0 until rowCount).toList).take(size).sorted.toArray
     var i = 0
     def getItemsFromIter(keys: Iterator[InternalRow], indices: Array[Int]): Array[InternalRow] = {
       val took = ArrayBuffer[InternalRow]()

@@ -32,6 +32,25 @@ import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.OapExternalSorter
 
+private[statistics] class SortedKeys(sortedKeysWithOccurTimes: Iterator[(Key, Int)])
+    extends Iterator[Key] {
+
+  var times: Int = _
+  var current: Key = _
+
+  override def hasNext: Boolean = sortedKeysWithOccurTimes.hasNext || times != 0
+
+  override def next(): Key = {
+    if (times == 0) {
+      val tuple = sortedKeysWithOccurTimes.next()
+      current = tuple._1
+      times = tuple._2
+    }
+    times -= 1
+    current
+  }
+}
+
 /**
  * Statistics write:
  * {{{
@@ -45,7 +64,7 @@ class StatisticsWriteManager {
   protected var stats: Array[StatisticsWriter] = _
   protected var schema: StructType = _
 
-  private val combiner = (_: Int) => 0
+  private val combiner = (_: Int) => 1
   private val merger = (c: Int, _: Int) => c + 1
   private val mergeCombiner = (c1: Int, c2: Int) => c1 + c2
   private val aggregator =
@@ -100,24 +119,6 @@ class StatisticsWriteManager {
     stats.foreach { stat =>
       IndexUtils.writeInt(out, stat.id)
       offset += 4
-    }
-
-    class SortedKeys(sortedKeysWithOccurTimes: Iterator[(Key, Int)]) extends Iterator[Key] {
-
-      var times: Int = _
-      var current: Key = _
-
-      override def hasNext: Boolean = sortedKeysWithOccurTimes.hasNext || times != 0
-
-      override def next(): Key = {
-        if (times == 0) {
-          val tuple = sortedKeysWithOccurTimes.next()
-          current = tuple._1
-          times = tuple._2
-        }
-        times -= 1
-        current
-      }
     }
 
     // each item of keys iterator is a Tuple2(Key, occurTimes)
