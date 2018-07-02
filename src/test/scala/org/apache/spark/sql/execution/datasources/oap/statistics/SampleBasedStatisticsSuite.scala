@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.execution.datasources.oap._
 import org.apache.spark.sql.execution.datasources.oap.index.{IndexScanner, IndexUtils}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class SampleBasedStatisticsSuite extends StatisticsTest {
 
@@ -157,5 +157,17 @@ class SampleBasedStatisticsSuite extends StatisticsTest {
     generateInterval(rowGen(301), dummyEnd,
       startInclude = true, endInclude = true)
     assert(sampleRead.analyse(intervalArray) == StatsAnalysisResult.USE_INDEX)
+  }
+
+  test("take sample from iterator") {
+    val sampleWriter = new SampleBasedStatisticsWriter(null, new Configuration())
+
+    val takeNum = 1000
+    val total = takeNum * 3
+    sampleWriter.rowCount = total
+
+    val iter = (0 until takeNum * 3).map(InternalRow(_)).toIterator
+    val ans = sampleWriter.takeSample(iter, takeNum)
+    assert(ans.size == takeNum)
   }
 }

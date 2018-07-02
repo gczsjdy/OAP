@@ -22,6 +22,7 @@ import java.sql.Date
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.oap.SharedOapContext
 import org.apache.spark.util.Utils
@@ -199,5 +200,15 @@ class StatisticsManagerSuite extends QueryTest with SharedOapContext with Before
       s"WHERE attr_date = '${DateTimeUtils.toJavaDate(1).toString}'"),
       Row.fromTuple(rowGen(1)) :: Nil)
     sql("drop oindex index5 on oap_test")
+  }
+
+  test("SortedKeys wrapper class") {
+    val row1 = InternalRow(1)
+    val times1 = 1
+    val row2 = InternalRow(2)
+    val times2 = 3
+
+    val arr = Array((row1, times1), (row2, times2))
+    assert(new SortedKeys(arr.toIterator).size == times1 + times2)
   }
 }
