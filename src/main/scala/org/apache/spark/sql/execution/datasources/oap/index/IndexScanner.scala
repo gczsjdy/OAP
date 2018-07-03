@@ -110,14 +110,17 @@ private[oap] abstract class IndexScanner(idxMeta: IndexMeta)
   // Decide by size ratio(generalized statistics : )) & statistics in index file
   private def analysisResByStatistics(indexPath: Path, dataPath: Path, conf: Configuration)
     : StatsAnalysisResult = {
+    val fs = dataPath.getFileSystem(conf)
+    require(fs.isFile(indexPath), s"Index file path $indexPath is a directory, it should be a file")
+
     // Policy 3: index file size < data file size)
 
     val filePolicyEnable =
       conf.getBoolean(OapConf.OAP_EXECUTOR_INDEX_SELECTION_FILE_POLICY.key,
         OapConf.OAP_EXECUTOR_INDEX_SELECTION_FILE_POLICY.defaultValue.get)
 
-    val indexFileSize = indexPath.getFileSystem(conf).getContentSummary(indexPath).getLength
-    val dataFileSize = dataPath.getFileSystem(conf).getContentSummary(dataPath).getLength
+    val indexFileSize = fs.getFileStatus(indexPath).getLen
+    val dataFileSize = fs.getFileStatus(dataPath).getLen
     val ratio = conf.getDouble(OapConf.OAP_INDEX_FILE_SIZE_MAX_RATIO.key,
       OapConf.OAP_INDEX_FILE_SIZE_MAX_RATIO.defaultValue.get)
 
