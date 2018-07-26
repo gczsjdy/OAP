@@ -29,7 +29,9 @@ import org.apache.spark.unsafe.types.UTF8String
 
 case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
 
-  var fiber: Fiber = _
+  // This is and only is set in `cache() of OapCache`
+  // TODO: make it immutable
+  var fiberId: FiberId = _
 
   val DISPOSE_TIMEOUT = 3000
 
@@ -50,9 +52,9 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
   }
 
   def tryDispose(): Boolean = {
-    require(fiber != null, "Fiber shouldn't be null for this FiberCache")
+    require(fiberId != null, "FiberId shouldn't be null for this FiberCache")
     val startTime = System.currentTimeMillis()
-    val writeLockOp = OapRuntime.get.map(_.fiberLockManager.getFiberLock(fiber).writeLock())
+    val writeLockOp = OapRuntime.get.map(_.fiberLockManager.getFiberLock(fiberId).writeLock())
     writeLockOp match {
       case None => return true // already stopped OapRuntime
       case Some(writeLock) =>
@@ -78,7 +80,7 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
           }
         }
     }
-    logWarning(s"Fiber Cache Dispose waiting detected for $fiber")
+    logWarning(s"Fiber Cache Dispose waiting detected for $fiberId")
     false
   }
 
@@ -87,7 +89,7 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
   protected[filecache] def realDispose(): Unit = {
     if (!disposed) {
       OapRuntime.get.foreach(_.memoryManager.free(fiberData))
-      OapRuntime.get.foreach(_.fiberLockManager.removeFiberLock(fiber))
+      OapRuntime.get.foreach(_.fiberLockManager.removeFiberLock(fiberId))
     }
     disposed = true
   }
