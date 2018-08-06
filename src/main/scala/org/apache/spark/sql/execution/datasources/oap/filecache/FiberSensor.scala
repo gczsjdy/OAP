@@ -24,7 +24,6 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Throwables
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.datasources.oap.IndexMeta
 import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
 import org.apache.spark.sql.oap.listener.SparkListenerCustomInfoUpdate
 import org.apache.spark.util.collection.BitSet
@@ -37,22 +36,14 @@ private[oap] case class FiberCacheStatus(
 
   val cachedFiberCount = bitmask.cardinality()
 
-  def moreCacheThan(other: FiberCacheStatus): Boolean = {
-    if (cachedFiberCount >= other.cachedFiberCount) {
-      true
-    } else {
-      false
-    }
-  }
+  def moreCacheThan(other: FiberCacheStatus): Boolean = cachedFiberCount >= other.cachedFiberCount
 }
-
-private[oap] case class IndexFiberCacheStatus(file: String, meta: IndexMeta)
-
 
 // TODO FiberSensor doesn't consider the fiber cache, but only the number of cached
 // fiber count
-private[oap] trait AbstractFiberSensor extends Logging {
-  case class HostFiberCache(host: String, status: FiberCacheStatus)
+private[sql] class FiberSensor extends Logging {
+
+  private case class HostFiberCache(host: String, status: FiberCacheStatus)
 
   private val fileToHost = new ConcurrentHashMap[String, HostFiberCache]
 
@@ -82,10 +73,10 @@ private[oap] trait AbstractFiberSensor extends Logging {
    * @param filePath fiber file's path
    * @return
    */
-  def getHosts(filePath: String): Option[String] = {
+  def getHosts(filePath: String): Seq[String] = {
     fileToHost.get(filePath) match {
-      case HostFiberCache(host, status) => Some(host)
-      case null => None
+      case HostFiberCache(host, status) => Seq(host)
+      case null => Seq.empty
     }
   }
 }
@@ -95,15 +86,13 @@ private[oap] object FiberSensor {
   val OAP_CACHE_EXECUTOR_PREFIX = "_OAP_EXECUTOR_"
 }
 
-private[sql] class FiberSensor extends AbstractFiberSensor
-
-object FiberCacheManagerSensor extends AbstractFiberSensor {
+object FiberCacheMetricsSensor extends Logging {
   val executorToCacheManager = new ConcurrentHashMap[String, CacheStats]()
 
   def summary(): CacheStats = executorToCacheManager.asScala.toMap.values
     .foldLeft(CacheStats())((sum, cache) => sum + cache)
 
-  override def update(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
+  def update(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
     if (fiberInfo.customizedInfo.nonEmpty) {
       try {
         val cacheMetrics = CacheStats(fiberInfo.customizedInfo)
