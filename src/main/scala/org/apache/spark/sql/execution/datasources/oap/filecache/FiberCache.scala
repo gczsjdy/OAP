@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.oap.filecache
 
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.internal.Logging
@@ -33,8 +32,6 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
   // TODO: make it immutable
   var fiberId: FiberId = _
 
-  val DISPOSE_TIMEOUT = 3000
-
   // We use readLock to lock occupy. _refCount need be atomic to make sure thread-safe
   protected val _refCount = new AtomicLong(0)
   def refCount: Long = _refCount.get()
@@ -49,39 +46,6 @@ case class FiberCache(protected val fiberData: MemoryBlock) extends Logging {
   def release(): Unit = {
     assert(refCount > 0, "release a non-used fiber")
     _refCount.decrementAndGet()
-  }
-
-  def tryDispose(): Boolean = {
-    require(fiberId != null, "FiberId shouldn't be null for this FiberCache")
-    val startTime = System.currentTimeMillis()
-    val writeLockOp = OapRuntime.get.map(_.fiberLockManager.getFiberLock(fiberId).writeLock())
-    writeLockOp match {
-      case None => return true // already stopped OapRuntime
-      case Some(writeLock) =>
-        // Give caller a chance to deal with the long wait case.
-        while (System.currentTimeMillis() - startTime <= DISPOSE_TIMEOUT) {
-          if (refCount != 0) {
-            // LRU access (get and occupy) done, but fiber was still occupied by at least one
-            // reader, so it needs to sleep some time to see if the reader done.
-            // Otherwise, it becomes a polling loop.
-            // TODO: use lock/sync-obj to leverage the concurrency APIs instead of explicit sleep.
-            Thread.sleep(100)
-          } else {
-            if (writeLock.tryLock(200, TimeUnit.MILLISECONDS)) {
-              try {
-                if (refCount == 0) {
-                  realDispose()
-                  return true
-                }
-              } finally {
-                writeLock.unlock()
-              }
-            }
-          }
-        }
-    }
-    logWarning(s"Fiber Cache Dispose waiting detected for $fiberId")
-    false
   }
 
   protected var disposed = false

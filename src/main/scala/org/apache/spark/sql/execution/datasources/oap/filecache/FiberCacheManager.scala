@@ -116,9 +116,6 @@ private[sql] class FiberCacheManager(
 
   def cacheCount: Long = cacheBackend.cacheCount
 
-  // Used by test suite
-  private[filecache] def pendingCount: Int = 0
-
   // A description of this FiberCacheManager for debugging.
   def toDebugString: String = {
     s"FiberCacheManager Statistics: { cacheCount=${cacheBackend.cacheCount}, " +
