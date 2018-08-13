@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.oap.filecache
 
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
@@ -31,60 +31,6 @@ import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
 import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
-
-private[filecache] class CacheGuardian(maxMemory: Long) extends Thread with Logging {
-
-  private val _pendingFiberSize: AtomicLong = new AtomicLong(0)
-
-  private val removalPendingQueue = new LinkedBlockingQueue[(FiberId, FiberCache)]()
-
-  // Tell if guardian thread is trying to remove one Fiber.
-  @volatile private var bRemoving: Boolean = false
-
-  def pendingFiberCount: Int = if (bRemoving) {
-    removalPendingQueue.size() + 1
-  } else {
-    removalPendingQueue.size()
-  }
-
-  def pendingFiberSize: Long = _pendingFiberSize.get()
-
-  def addRemovalFiber(fiber: FiberId, fiberCache: FiberCache): Unit = {
-    _pendingFiberSize.addAndGet(fiberCache.size())
-    removalPendingQueue.offer((fiber, fiberCache))
-    if (_pendingFiberSize.get() > maxMemory) {
-      logWarning("Fibers pending on removal use too much memory, " +
-          s"current: ${_pendingFiberSize.get()}, max: $maxMemory")
-    }
-  }
-
-  override def run(): Unit = {
-    while (true) {
-      val fiberCache = removalPendingQueue.take()._2
-      releaseFiberCache(fiberCache)
-    }
-  }
-
-  private def releaseFiberCache(cache: FiberCache): Unit = {
-    bRemoving = true
-    val fiberId = cache.fiberId
-    logDebug(s"Removing fiber: $fiberId")
-    // Block if fiber is in use.
-    if (!cache.tryDispose()) {
-      logDebug(s"Waiting fiber to be released timeout. Fiber: $fiberId")
-      removalPendingQueue.offer((fiberId, cache))
-      if (_pendingFiberSize.get() > maxMemory) {
-        logWarning("Fibers pending on removal use too much memory, " +
-            s"current: ${_pendingFiberSize.get()}, max: $maxMemory")
-      }
-    } else {
-      _pendingFiberSize.addAndGet(-cache.size())
-      // TODO: Make log more readable
-      logDebug(s"Fiber removed successfully. Fiber: $fiberId")
-    }
-    bRemoving = false
-  }
-}
 
 private[sql] class FiberCacheManager(
     sparkEnv: SparkEnv, memoryManager: MemoryManager) extends Logging {
@@ -171,7 +117,7 @@ private[sql] class FiberCacheManager(
   def cacheCount: Long = cacheBackend.cacheCount
 
   // Used by test suite
-  private[filecache] def pendingCount: Int = cacheBackend.pendingFiberCount
+  private[filecache] def pendingCount: Int = 0
 
   // A description of this FiberCacheManager for debugging.
   def toDebugString: String = {

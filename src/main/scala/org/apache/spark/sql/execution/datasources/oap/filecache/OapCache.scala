@@ -20,13 +20,15 @@ package org.apache.spark.sql.execution.datasources.oap.filecache
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
 import com.google.common.cache._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.oap.OapRuntime
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 trait OapCache {
   val dataFiberSize: AtomicLong = new AtomicLong(0)
@@ -42,7 +44,6 @@ trait OapCache {
   def cacheSize: Long
   def cacheCount: Long
   def cacheStats: CacheStats
-  def pendingFiberCount: Int
   def cleanUp(): Unit = {
     invalidateAll(getFibers)
     dataFiberSize.set(0L)
@@ -80,16 +81,11 @@ trait OapCache {
 
 class SimpleOapCache extends OapCache with Logging {
 
-  // We don't bother the memory use of Simple Cache
-  private val cacheGuardian = new CacheGuardian(Int.MaxValue)
-  cacheGuardian.start()
-
   override def get(fiberId: FiberId): FiberCache = {
     val fiberCache = cache(fiberId)
     incFiberCountAndSize(fiberId, 1, fiberCache.size())
     fiberCache.occupy()
     // We only use fiber for once, and CacheGuardian will dispose it after release.
-    cacheGuardian.addRemovalFiber(fiberId, fiberCache)
     decFiberCountAndSize(fiberId, 1, fiberCache.size())
     fiberCache
   }
@@ -110,14 +106,9 @@ class SimpleOapCache extends OapCache with Logging {
 
   override def cacheCount: Long = 0
 
-  override def pendingFiberCount: Int = cacheGuardian.pendingFiberCount
 }
 
 class GuavaOapCache(cacheMemory: Long, cacheGuardianMemory: Long) extends OapCache with Logging {
-
-  // TODO: CacheGuardian can also track cache statistics periodically
-  private val cacheGuardian = new CacheGuardian(cacheGuardianMemory)
-  cacheGuardian.start()
 
   private val KB: Double = 1024
   private val MAX_WEIGHT = (cacheMemory / KB).toInt
@@ -126,10 +117,22 @@ class GuavaOapCache(cacheMemory: Long, cacheGuardianMemory: Long) extends OapCac
   // Total cached size for debug purpose, not include pending fiber
   private val _cacheSize: AtomicLong = new AtomicLong(0)
 
+  private val fiberCacheReleasePool = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool(
+      "OAP-release-FiberCache", Runtime.getRuntime.availableProcessors()))
+
+  private val releaseMemoryThreadSleepingInterval = 200
+
   private val removalListener = new RemovalListener[FiberId, FiberCache] {
     override def onRemoval(notification: RemovalNotification[FiberId, FiberCache]): Unit = {
       logDebug(s"Put fiber into removal list. Fiber: ${notification.getKey}")
-      cacheGuardian.addRemovalFiber(notification.getKey, notification.getValue)
+      val condition = Future {
+        while (notification.getValue.refCount != 0) {
+          Thread.sleep(releaseMemoryThreadSleepingInterval)
+        }
+      } (fiberCacheReleasePool)
+      ThreadUtils.awaitResult(condition, Duration.Inf)
+      notification.getValue.realDispose()
       _cacheSize.addAndGet(-notification.getValue.size())
       decFiberCountAndSize(notification.getKey, 1, notification.getValue.size())
     }
@@ -197,7 +200,7 @@ class GuavaOapCache(cacheMemory: Long, cacheGuardianMemory: Long) extends OapCac
     CacheStats(
       dataFiberCount.get(), dataFiberSize.get(),
       indexFiberCount.get(), indexFiberSize.get(),
-      pendingFiberCount, cacheGuardian.pendingFiberSize,
+      0, 0,
       stats.hitCount(),
       stats.missCount(),
       stats.loadCount(),
@@ -207,8 +210,6 @@ class GuavaOapCache(cacheMemory: Long, cacheGuardianMemory: Long) extends OapCac
   }
 
   override def cacheCount: Long = cacheInstance.size()
-
-  override def pendingFiberCount: Int = cacheGuardian.pendingFiberCount
 
   override def cleanUp: Unit = {
     super.cleanUp
