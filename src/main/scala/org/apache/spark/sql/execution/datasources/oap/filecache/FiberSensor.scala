@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.oap.filecache
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.JavaConverters._
-
 import com.google.common.base.Throwables
 
 import org.apache.spark.internal.Logging
@@ -47,7 +45,7 @@ private[sql] class FiberSensor extends Logging {
 
   private val fileToHost = new ConcurrentHashMap[String, HostFiberCache]
 
-  def update(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
+  def updateLocations(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
     val updateExecId = fiberInfo.executorId
     val updateHostName = fiberInfo.hostName
     val host = FiberSensor.OAP_CACHE_HOST_PREFIX + updateHostName +
@@ -63,6 +61,24 @@ private[sql] class FiberSensor extends Logging {
           // replace the old HostFiberCache as the new one has more data cached
           fileToHost.put(status.file, HostFiberCache(host, status))
         case _ =>
+      }
+    }
+  }
+
+  // TODO: define a function to wrap this and make it private
+  private[sql] val executorToCacheManager = new ConcurrentHashMap[String, CacheStats]()
+
+  def updateMetrics(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
+    if (fiberInfo.customizedInfo.nonEmpty) {
+      try {
+        val cacheMetrics = CacheStats(fiberInfo.customizedInfo)
+        executorToCacheManager.put(fiberInfo.executorId, cacheMetrics)
+        logDebug(s"execID:${fiberInfo.executorId}, host:${fiberInfo.hostName}," +
+          s" ${cacheMetrics.toDebugString}")
+      } catch {
+        case t: Throwable =>
+          val stack = Throwables.getStackTraceAsString(t)
+          logError(s"FiberSensor parse json failed, $stack")
       }
     }
   }
@@ -84,26 +100,4 @@ private[sql] class FiberSensor extends Logging {
 private[oap] object FiberSensor {
   val OAP_CACHE_HOST_PREFIX = "OAP_HOST_"
   val OAP_CACHE_EXECUTOR_PREFIX = "_OAP_EXECUTOR_"
-}
-
-object FiberCacheMetricsSensor extends Logging {
-  val executorToCacheManager = new ConcurrentHashMap[String, CacheStats]()
-
-  def summary(): CacheStats = executorToCacheManager.asScala.toMap.values
-    .foldLeft(CacheStats())((sum, cache) => sum + cache)
-
-  def update(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
-    if (fiberInfo.customizedInfo.nonEmpty) {
-      try {
-        val cacheMetrics = CacheStats(fiberInfo.customizedInfo)
-        executorToCacheManager.put(fiberInfo.executorId, cacheMetrics)
-        logDebug(s"execID:${fiberInfo.executorId}, host:${fiberInfo.hostName}," +
-          s" ${cacheMetrics.toDebugString}")
-      } catch {
-        case t: Throwable =>
-          val stack = Throwables.getStackTraceAsString(t)
-          logError(s"FiberCacheManagerSensor parse json failed, $stack")
-      }
-    }
-  }
 }
