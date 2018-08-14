@@ -37,8 +37,9 @@ private[oap] case class FiberCacheStatus(
   def moreCacheThan(other: FiberCacheStatus): Boolean = cachedFiberCount >= other.cachedFiberCount
 }
 
-// TODO FiberSensor doesn't consider the fiber cache, but only the number of cached
-// fiber count
+// TODO: FiberSensor doesn't consider the fiber cache, but only the number of cached fiber count
+// FiberSensor is the FiberCache info recorder on Driver, it contains a file cache location mapping
+// (for cache locality) and metrics info
 private[sql] class FiberSensor extends Logging {
 
   private case class HostFiberCache(host: String, status: FiberCacheStatus)
