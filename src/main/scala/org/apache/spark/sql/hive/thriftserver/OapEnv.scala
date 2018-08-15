@@ -38,8 +38,8 @@ private[sql] object OapEnv extends Logging {
   var initialized = false
 
   def init() {
-    // TODO: eliminate this
-    if (! initialized) {
+    // For unit tests, SparkSession is created in the testing framework
+    if (!initialized && !Utils.isTesting) {
       if (sqlContext == null) {
         val sparkConf = new SparkConf(loadDefaults = true)
         // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
@@ -48,8 +48,7 @@ private[sql] object OapEnv extends Logging {
             .getOption("spark.app.name")
             .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
 
-        sparkConf
-            .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
+        sparkConf.setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
 
         val sparkSession = OapSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
         sparkContext = sparkSession.sparkContext

@@ -46,7 +46,7 @@ private[oap] trait OapRuntime extends Logging {
 /**
  * Initializing [[FiberSensor]] and executor managers if local
  */
-private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
+private[sql] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
 
   // For non-Spark SQL CLI/ThriftServer conditions, OAP-specific features will be fully enabled by
   // this, nevertheless not instantly when a Spark application is started, but when an OapRuntime
@@ -54,7 +54,12 @@ private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
   // cache
   OapEnv.initWithoutCreatingOapSession()
 
-  override val sparkSession = { OapEnv.init(); OapEnv.sparkSession}
+  private var _sparkSession = { OapEnv.init(); OapEnv.sparkSession }
+  override def sparkSession: SparkSession = _sparkSession
+  // For Unit Test: setting TestOapSession
+  private[sql] def setTestSession(session: SparkSession): Unit = {
+    _sparkSession = session
+  }
   override val fiberSensor = new FiberSensor
   override val memoryManager =
     if (OapRuntime.isLocal(sparkEnv.conf)) new MemoryManager(sparkEnv) else null
