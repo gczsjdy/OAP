@@ -79,6 +79,7 @@ private[spark] object OapEnv extends Logging {
       val sc = SparkContext.getOrCreate()
       sc.addSparkListener(new OapListener)
       sc.ui.foreach(new OapTab(_))
+      initialized = true
     }
   }
 
