@@ -22,6 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.OapException
 import org.apache.spark.sql.execution.datasources.oap.OapMetricsManager
 import org.apache.spark.sql.execution.datasources.oap.filecache._
+import org.apache.spark.sql.hive.thriftserver.OapEnv
 import org.apache.spark.sql.oap.rpc._
 import org.apache.spark.util.{RpcUtils, Utils}
 
@@ -113,6 +114,7 @@ private[oap] class OapExecutorRuntime(sparkEnv: SparkEnv) extends OapRuntime {
 }
 
 object OapRuntime {
+
   private var rt: OapRuntime = _
   /**
    * user transparent initialization
@@ -122,6 +124,10 @@ object OapRuntime {
   def get: Option[OapRuntime] = Option(rt)
 
   def init(): OapRuntime = {
+    // For non-Spark SQL CLI/ThriftServer conditions, OAP-specific features will be fully enabled by
+    // this, nevertheless not instantly when a Spark application is started, but when an OapRuntime
+    // is created. For example, OAP UI tab will show after you read a Parquet file to OAP cache
+    OapEnv.initWithoutCreatingOapSession()
     val sparkEnv = SparkEnv.get
     if (sparkEnv == null) throw new OapException("Can't run OAP without SparkContext")
     init(sparkEnv)
