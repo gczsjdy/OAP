@@ -40,7 +40,7 @@ private[spark] object OapEnv extends Logging {
 
   var initialized: Boolean = false
 
-  def init(): Unit = {
+  def init(): Unit = synchronized {
     if (!initialized && !Utils.isTesting) {
       if (sqlContext == null) {
         val sparkConf = new SparkConf(loadDefaults = true)
@@ -77,7 +77,7 @@ private[spark] object OapEnv extends Logging {
   }
 
   // This is to enable OAP listener and UI in non-Spark SQL CLI/ThriftServer conditions
-  def initWithoutCreatingOapSession(): Unit = {
+  def initWithoutCreatingOapSession(): Unit = synchronized {
     if (!initialized && !Utils.isTesting) {
       val sc = SparkContext.getOrCreate()
       sc.addSparkListener(new OapListener)
