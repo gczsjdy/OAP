@@ -49,7 +49,8 @@ private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
 
   // For non-Spark SQL CLI/ThriftServer conditions, OAP-specific features will be fully enabled by
   // this, nevertheless not instantly when a Spark application is started, but when an OapRuntime
-  // is created. For example, OAP UI tab will show at the moment you read a Parquet file to OAP cache
+  // is created. For example, OAP UI tab will show at the moment you read a Parquet file to OAP
+  // cache
   OapEnv.initWithoutCreatingOapSession()
 
   override val memoryManager =
