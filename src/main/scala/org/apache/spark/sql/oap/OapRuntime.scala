@@ -46,6 +46,12 @@ private[oap] trait OapRuntime extends Logging {
  * Initializing [[FiberSensor]] and executor managers if local
  */
 private[oap] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
+
+  // For non-Spark SQL CLI/ThriftServer conditions, OAP-specific features will be fully enabled by
+  // this, nevertheless not instantly when a Spark application is started, but when an OapRuntime
+  // is created. For example, OAP UI tab will show at the moment you read a Parquet file to OAP cache
+  OapEnv.initWithoutCreatingOapSession()
+
   override val memoryManager =
     if (OapRuntime.isLocal(sparkEnv.conf)) new MemoryManager(sparkEnv) else null
   override val fiberCacheManager =
@@ -124,10 +130,6 @@ object OapRuntime {
   def get: Option[OapRuntime] = Option(rt)
 
   def init(): OapRuntime = {
-    // For non-Spark SQL CLI/ThriftServer conditions, OAP-specific features will be fully enabled by
-    // this, nevertheless not instantly when a Spark application is started, but when an OapRuntime
-    // is created. For example, OAP UI tab will show after you read a Parquet file to OAP cache
-    OapEnv.initWithoutCreatingOapSession()
     val sparkEnv = SparkEnv.get
     if (sparkEnv == null) throw new OapException("Can't run OAP without SparkContext")
     init(sparkEnv)
