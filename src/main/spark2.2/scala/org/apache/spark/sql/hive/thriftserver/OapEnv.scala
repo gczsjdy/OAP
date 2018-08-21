@@ -47,9 +47,9 @@ private[spark] object OapEnv extends Logging {
         // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
         // the default appName [SparkSQLCLIDriver] in cli or beeline.
         val maybeAppName = sparkConf
-            .getOption("spark.app.name")
-            .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
-            .filterNot(_ == classOf[HiveThriftServer2].getName)
+          .getOption("spark.app.name")
+          .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
+          .filterNot(_ == classOf[HiveThriftServer2].getName)
 
         sparkConf.setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
 
@@ -58,8 +58,8 @@ private[spark] object OapEnv extends Logging {
         sqlContext = sparkSession.sqlContext
 
         val metadataHive = sparkSession
-            .sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
-            .client.newSession()
+          .sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+          .client.newSession()
         metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
         metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
         metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
