@@ -76,7 +76,7 @@ private[spark] object OapEnv extends Logging {
     }
   }
 
-  // This is to enable OAP listener and UI in non-Spark SQL CLI/ThriftServer conditions
+  // This is to enable certain OAP features, like UI, in non-Spark SQL CLI/ThriftServer conditions
   def initWithoutCreatingOapSession(): Unit = synchronized {
     if (!initialized && !Utils.isTesting) {
       val sc = SparkContext.getOrCreate()
