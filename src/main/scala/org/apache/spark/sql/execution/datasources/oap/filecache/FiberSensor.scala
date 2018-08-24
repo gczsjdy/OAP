@@ -44,8 +44,6 @@ private[sql] class FiberSensor extends Logging {
 
   private val fileToHosts = new ConcurrentHashMap[String, Seq[HostFiberCache]]
 
-  private val NUM_GET_HOSTS = 2
-
   private def updateRecordingMap(fromHost: String, commingStatus: FiberCacheStatus) = synchronized {
     val currentHostsForFile = fileToHosts.getOrDefault(commingStatus.file, Seq.empty)
     val (_, theRest) = currentHostsForFile.partition(_.host == fromHost)
@@ -92,11 +90,12 @@ private[sql] class FiberSensor extends Logging {
     // From max to min
     val sorted = fileToHosts.getOrDefault(filePath, Seq.empty).map(
       hostAndInfo => (hostAndInfo.host, hostAndInfo.status.cachedFiberCount)).sortBy((_._2 * -1))
-    sorted.take(NUM_GET_HOSTS).map(_._1)
+    sorted.take(FiberSensor.NUM_GET_HOSTS).map(_._1)
   }
 }
 
-private[oap] object FiberSensor {
+private[sql] object FiberSensor {
+  val NUM_GET_HOSTS = 2
   val OAP_CACHE_HOST_PREFIX = "OAP_HOST_"
   val OAP_CACHE_EXECUTOR_PREFIX = "_OAP_EXECUTOR_"
 }

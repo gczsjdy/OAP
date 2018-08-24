@@ -62,7 +62,7 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     sqlContext.dropTempTable("oap_test")
   }
 
-  test("test FiberSensor with sql") {
+  test("FiberSensor with sql") {
 
     def getCacheStats(fiberSensor: FiberSensor): CacheStats =
       fiberSensor.executorToCacheManager.asScala.toMap.values.foldLeft(
@@ -123,7 +123,7 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     }
   }
 
-  test("test FiberSensor onCustomInfoUpdate FiberCacheManagerMessager") {
+  test("FiberSensor onCustomInfoUpdate FiberCacheManagerMessager") {
     val host = "0.0.0.0"
     val execID = "exec1"
     val messager = "FiberCacheManagerMessager"
@@ -148,7 +148,13 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
       fiberSensor.executorToCacheManager.get(execID).toJson)
   }
 
-  test("test get hosts from FiberSensor") {
+  test("get hosts from FiberSensor") {
+
+    def getAns(file: String): Seq[String] = fiberSensor.getHosts(file)
+
+    def checkExistence(host: String, execId: String, in: String): Boolean =
+      in.contains(host) && in.contains(execId)
+
     val filePath = "file1"
     val groupCount = 30
     val fieldCount = 3
@@ -163,8 +169,7 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     val fiberInfo = SparkListenerCustomInfoUpdate(host1, execId1,
       "OapFiberCacheHeartBeatMessager", CacheStatusSerDe.serialize(fcs))
     fiberSensor.updateLocations(fiberInfo)
-    assert(fiberSensor.getHosts(filePath) contains (FiberSensor.OAP_CACHE_HOST_PREFIX + host1 +
-      FiberSensor.OAP_CACHE_EXECUTOR_PREFIX + execId1))
+    assert(checkExistence(host1, execId1, getAns(filePath)(0)))
 
     // executor2 update
     val host2 = "host2"
@@ -181,12 +186,13 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
       "OapFiberCacheHeartBeatMessager", CacheStatusSerDe
         .serialize(Seq(FiberCacheStatus(filePath, bitSet2, groupCount, fieldCount))))
     fiberSensor.updateLocations(fiberInfo2)
-    assert(fiberSensor.getHosts(filePath) contains  (FiberSensor.OAP_CACHE_HOST_PREFIX + host2 +
-      FiberSensor.OAP_CACHE_EXECUTOR_PREFIX + execId2))
+    assert(checkExistence(host2, execId2, getAns(filePath)(0)))
+    assert(checkExistence(host1, execId1, getAns(filePath)(1)))
 
-    // executor3 update
+    // Another file cache update, doesn't influence filePath
+    val filePath2 = "file2"
     val host3 = "host3"
-    val execId3 = "executor3"
+    val execId3 = "executor2"
     val bitSet3 = new BitSet(90)
     bitSet3.set(7)
     bitSet3.set(8)
@@ -194,9 +200,32 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     bitSet3.set(10)
     val fiberInfo3 = SparkListenerCustomInfoUpdate(host3, execId3,
       "OapFiberCacheHeartBeatMessager", CacheStatusSerDe
-        .serialize(Seq(FiberCacheStatus(filePath, bitSet3, groupCount, fieldCount))))
+        .serialize(Seq(FiberCacheStatus(filePath2, bitSet3, groupCount, fieldCount))))
     fiberSensor.updateLocations(fiberInfo3)
-    assert(fiberSensor.getHosts(filePath) === Seq(FiberSensor.OAP_CACHE_HOST_PREFIX + host2 +
-      FiberSensor.OAP_CACHE_EXECUTOR_PREFIX + execId2))
+    assert(checkExistence(host2, execId2, getAns(filePath)(0)))
+    assert(checkExistence(host1, execId1, getAns(filePath)(1)))
+
+    // New info for filePath host2:executor2, less cached may because of eviction
+    val bitSet4 = new BitSet(90)
+    bitSet4.set(1)
+
+    val fiberInfo4 = SparkListenerCustomInfoUpdate(host2, execId2,
+      "OapFiberCacheHeartBeatMessager", CacheStatusSerDe
+        .serialize(Seq(FiberCacheStatus(filePath, bitSet4, groupCount, fieldCount))))
+    fiberSensor.updateLocations(fiberInfo4)
+    // Now host1: execId1 comes first
+    assert(checkExistence(host1, execId1, getAns(filePath)(0)))
+    assert(checkExistence(host2, execId2, getAns(filePath)(1)))
+
+    // New info for filePath, host1: execId2, Driver maintaining 3 records for it, while
+    // NUM_GET_HOSTS returned
+    val bitSet5 = new BitSet(90)
+    bitSet5.set(1)
+
+    val fiberInfo5 = SparkListenerCustomInfoUpdate(host1, execId2,
+      "OapFiberCacheHeartBeatMessager", CacheStatusSerDe
+        .serialize(Seq(FiberCacheStatus(filePath, bitSet5, groupCount, fieldCount))))
+    fiberSensor.updateLocations(fiberInfo5)
+    assert(getAns(filePath).length == FiberSensor.NUM_GET_HOSTS)
   }
 }
