@@ -34,36 +34,34 @@ private[oap] case class FiberCacheStatus(
 
   val cachedFiberCount = bitmask.cardinality()
 
-  def moreCacheThan(other: FiberCacheStatus): Boolean = cachedFiberCount >= other.cachedFiberCount
 }
 
-// TODO: FiberSensor doesn't consider the fiber cache, but only the number of cached fiber count
 // FiberSensor is the FiberCache info recorder on Driver, it contains a file cache location mapping
 // (for cache locality) and metrics info
 private[sql] class FiberSensor extends Logging {
 
   private case class HostFiberCache(host: String, status: FiberCacheStatus)
 
-  private val fileToHost = new ConcurrentHashMap[String, HostFiberCache]
+  private val fileToHosts = new ConcurrentHashMap[String, Seq[HostFiberCache]]
+
+  private val NUM_GET_HOST = 2
+
+  private def updateRecordingMap(fromHost: String, commingStatus: FiberCacheStatus) = synchronized {
+    val currentHostsForFile = fileToHosts.getOrDefault(commingStatus.file, Seq.empty)
+    val (_, theRest) = currentHostsForFile.partition(_.host == fromHost)
+    val newHostsForFile = theRest :+ HostFiberCache(fromHost, commingStatus)
+    fileToHosts.put(commingStatus.file, newHostsForFile)
+  }
 
   def updateLocations(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
     val updateExecId = fiberInfo.executorId
     val updateHostName = fiberInfo.hostName
     val host = FiberSensor.OAP_CACHE_HOST_PREFIX + updateHostName +
       FiberSensor.OAP_CACHE_EXECUTOR_PREFIX + updateExecId
-    val fibersOnExecutor = CacheStatusSerDe.deserialize(fiberInfo.customizedInfo)
+    val fiberCacheStatus = CacheStatusSerDe.deserialize(fiberInfo.customizedInfo)
     logDebug(s"Got updated fiber info from host: $updateHostName, executorId: $updateExecId," +
-      s"host is $host, info array len is ${fibersOnExecutor.size}")
-    fibersOnExecutor.foreach { status =>
-      fileToHost.get(status.file) match {
-        case null => fileToHost.put(status.file, HostFiberCache(host, status))
-        case HostFiberCache(_, fcs) if status.moreCacheThan(fcs) =>
-          // only cache a single executor ID, TODO need to considered the fiber id required
-          // replace the old HostFiberCache as the new one has more data cached
-          fileToHost.put(status.file, HostFiberCache(host, status))
-        case _ =>
-      }
-    }
+      s"host is $host, info array len is ${fiberCacheStatus.size}")
+    fiberCacheStatus.foreach(updateRecordingMap(host, _))
   }
 
   // TODO: define a function to wrap this and make it private
@@ -91,10 +89,10 @@ private[sql] class FiberSensor extends Logging {
    * @return
    */
   def getHosts(filePath: String): Seq[String] = {
-    fileToHost.get(filePath) match {
-      case HostFiberCache(host, status) => Seq(host)
-      case null => Seq.empty
-    }
+    // From max to min
+    val sorted = fileToHosts.get(filePath).map(
+      hostAndInfo => (hostAndInfo.host, hostAndInfo.status.cachedFiberCount)).sortBy((_._2 * -1))
+    sorted.take(NUM_GET_HOST).map(_._1)
   }
 }
 
