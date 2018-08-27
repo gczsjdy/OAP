@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources.oap.filecache
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConverters._
+
 import com.google.common.base.Throwables
 
 import org.apache.spark.internal.Logging
@@ -51,6 +53,13 @@ private[sql] class FiberSensor extends Logging {
     fileToHosts.put(commingStatus.file, newHostsForFile)
   }
 
+  private def discardOutdatedInfo(host: String) = synchronized {
+    for ((k: String, v: Seq[HostFiberCache]) <- fileToHosts.asScala) {
+      val(_, kept) = v.partition(_.host == host)
+      fileToHosts.put(k, kept)
+    }
+  }
+
   def updateLocations(fiberInfo: SparkListenerCustomInfoUpdate): Unit = {
     val updateExecId = fiberInfo.executorId
     val updateHostName = fiberInfo.hostName
@@ -59,6 +68,9 @@ private[sql] class FiberSensor extends Logging {
     val fiberCacheStatus = CacheStatusSerDe.deserialize(fiberInfo.customizedInfo)
     logDebug(s"Got updated fiber info from host: $updateHostName, executorId: $updateExecId," +
       s"host is $host, info array len is ${fiberCacheStatus.size}")
+    // Coming information of a certain executor requires discarding previous records so as to
+    // reflect Fibers' eviction
+    discardOutdatedInfo(host)
     fiberCacheStatus.foreach(updateRecordingMap(host, _))
   }
 
