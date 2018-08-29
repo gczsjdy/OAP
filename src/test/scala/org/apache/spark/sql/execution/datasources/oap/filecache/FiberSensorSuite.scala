@@ -228,4 +228,29 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     fiberSensor.updateLocations(fiberInfo5)
     assert(getAns(filePath).length == FiberSensor.NUM_GET_HOSTS)
   }
+
+  test("Limited size SortedSet") {
+    class A(a: Int) extends Ordering[A] {
+      // Reverse order
+      override def compare(x: A, y: A): Int = y.a - x.a
+    }
+
+    val a1 = new A(1)
+    val a2 = new A(2)
+    val a3 = new A(3)
+    val a4 = new A(4)
+
+    var set = new LimitedSortedSet[A](2)
+    set += a2
+    assert(set.toSeq === Seq(a2))
+
+    set += a4
+    assert(set.toSeq == Seq(a4, a2))
+
+    set += a3
+    assert(set.toSeq === Seq(a4, a3))
+
+    set += a1
+    assert(set.toSeq === Seq(a4, a3))
+  }
 }
