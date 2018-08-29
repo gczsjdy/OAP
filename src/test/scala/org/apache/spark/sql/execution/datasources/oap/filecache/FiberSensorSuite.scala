@@ -242,15 +242,15 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
 
     var set = new LimitedSortedSet[A](2)
     set += a2
-    assert(set.toSeq === Seq(a2))
+    assert(set.values.toSeq === Seq(a2))
 
     set += a4
-    assert(set.toSeq == Seq(a4, a2))
+    assert(set.values.toSeq == Seq(a4, a2))
 
     set += a3
-    assert(set.toSeq === Seq(a4, a3))
+    assert(set.values.toSeq === Seq(a4, a3))
 
     set += a1
-    assert(set.toSeq === Seq(a4, a3))
+    assert(set.values.toSeq === Seq(a4, a3))
   }
 }

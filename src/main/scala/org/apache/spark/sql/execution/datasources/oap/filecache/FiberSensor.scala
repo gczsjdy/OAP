@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.oap.filecache
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.{SortedSet, TreeSet}
+import scala.collection.immutable.SortedSet
 
 import com.google.common.base.Throwables
 
@@ -40,27 +40,35 @@ private[oap] case class FiberCacheStatus(
 }
 
 private case class HostFiberCache(host: String, status: FiberCacheStatus)
-    extends Ordering[HostFiberCache] {
-  override def compare(x: HostFiberCache, y: HostFiberCache): Int = {
-    y.status.cachedFiberCount - x.status.cachedFiberCount
+    extends Ordered[HostFiberCache] {
+  override def compare(another: HostFiberCache): Int = {
+    another.status.cachedFiberCount - status.cachedFiberCount
   }
 }
 
-private[filecache] class LimitedSortedSet[T](
+private[filecache] case class LimitedSortedSet[T](
     maxSize: Int,
-    values: SortedSet[T] = SortedSet.empty[T]) {
+    values: SortedSet[T] = SortedSet.empty[T])(implicit ord: Ordering[T]) {
+
+  import scala.math.Ordering.comparatorToOrdering
 
   def +(item: T): LimitedSortedSet[T] = {
-    val added = values. + (item)
+    var added = values. + (item)
     if (added.size > maxSize) {
-      added.dropRight(1)
+      added = added.dropRight(1)
     }
     LimitedSortedSet(maxSize, added)
   }
 
-  def partition(p: T => Boolean): (SortedSet[T], SortedSet[T]) = {
-    values.partition(p)
+  def partition(p: T => Boolean): (LimitedSortedSet[T], LimitedSortedSet[T]) = {
+    val(l, r) = values.partition(p)
+    (LimitedSortedSet(maxSize, l), LimitedSortedSet(maxSize, r))
   }
+
+  def take(n: Int): LimitedSortedSet[T] = {
+    LimitedSortedSet(maxSize, values.take(n))
+  }
+
 }
 
 // FiberSensor is the FiberCache info recorder on Driver, it contains a file cache location mapping
@@ -78,7 +86,7 @@ private[sql] class FiberSensor extends Logging {
   }
 
   private def discardOutdatedInfo(host: String) = synchronized {
-    for ((k: String, v: Seq[HostFiberCache]) <- fileToHosts.asScala) {
+    for ((k: String, v: LimitedSortedSet[HostFiberCache]) <- fileToHosts.asScala) {
       val(_, kept) = v.partition(_.host == host)
       fileToHosts.put(k, kept)
     }
@@ -123,11 +131,9 @@ private[sql] class FiberSensor extends Logging {
    * @return
    */
   def getHosts(filePath: String): Seq[String] = {
-    if (fileToHosts.contains(filePath)) {
-      fileToHosts.get(filePath).take(FiberSensor.NUM_GET_HOSTS).map(_.host).toSeq
-    } else {
-      Seq.empty
-    }
+    fileToHosts.getOrDefault(
+      filePath, LimitedSortedSet[HostFiberCache](0))
+        .take(FiberSensor.NUM_GET_HOSTS).values.map(_.host).toSeq
   }
 }
 
