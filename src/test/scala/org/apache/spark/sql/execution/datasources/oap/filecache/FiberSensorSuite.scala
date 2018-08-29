@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.oap.filecache
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -25,6 +26,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.execution.datasources.oap.filecache.FiberSensor.HostFiberCache
 import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.OapRuntime
@@ -231,26 +233,34 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
 
   test("updateRecordingMap will preserve at most FiberSensor.MAX_HOSTS_MAINTAINED records for " +
       "each file") {
-
     val filePath = "file"
     val groupCount = 30
     val fieldCount = 3
 
     val host = "host"
     val execId = "executor"
-    val bitSet1 = new BitSet(90)
+    val bitSet = new BitSet(90)
 
     (0 until FiberSensor.MAX_HOSTS_MAINTAINED + 1).foreach { i =>
       // The host on the next have more Fibers than this one
-      bitSet1.set(i)
-      val status = FiberCacheStatus(filePath, bitSet1, groupCount, fieldCount)
+      bitSet.set(i)
+      val status = FiberCacheStatus(filePath, bitSet, groupCount, fieldCount)
       fiberSensor.updateRecordingMap(s"$host$i $execId$i", status)
-      // After inserting the MAX + 1 th Fiber, will still be MAX records
+      // For the last(MAX_HOSTS_MAINTAINED + 1 th) Fiber inserted, number of records won't increase
       if (i != FiberSensor.MAX_HOSTS_MAINTAINED) {
         assert(fiberSensor.fileToHosts.get(filePath).length == i + 1)
       }
     }
 
     assert(fiberSensor.fileToHosts.get(filePath).length == FiberSensor.MAX_HOSTS_MAINTAINED)
+  }
+
+  test("Discard outdated info") {
+    val host = "host"
+    fiberSensor.fileToHosts.put(host, new ArrayBuffer[HostFiberCache](0))
+    assert(fiberSensor.fileToHosts.get(host) != null)
+
+    fiberSensor.discardOutdatedInfo(host)
+    assert(fiberSensor.fileToHosts.get(host) == null)
   }
 }
