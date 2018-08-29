@@ -54,7 +54,7 @@ private[sql] class OapDriverRuntime(sparkEnv: SparkEnv) extends OapRuntime {
   // cache
   OapEnv.initWithoutCreatingOapSession()
 
-  private var _sparkSession = { OapEnv.init(); OapEnv.sparkSession }
+  private var _sparkSession = OapEnv.sparkSession
   override def sparkSession: SparkSession = _sparkSession
   // For Unit Test: setting TestOapSession
   private[sql] def setTestSession(session: SparkSession): Unit = {
