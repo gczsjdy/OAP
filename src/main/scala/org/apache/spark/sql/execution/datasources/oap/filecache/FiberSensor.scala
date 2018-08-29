@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.oap.filecache
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.SortedSet
+import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.base.Throwables
 
@@ -39,54 +39,31 @@ private[oap] case class FiberCacheStatus(
 
 }
 
-private case class HostFiberCache(host: String, status: FiberCacheStatus)
-    extends Ordered[HostFiberCache] {
-  override def compare(another: HostFiberCache): Int = {
-    another.status.cachedFiberCount - status.cachedFiberCount
-  }
-}
-
-private[filecache] case class LimitedSortedSet[T](
-    maxSize: Int,
-    values: SortedSet[T] = SortedSet.empty[T])(implicit ord: Ordering[T]) {
-
-  import scala.math.Ordering.comparatorToOrdering
-
-  def +(item: T): LimitedSortedSet[T] = {
-    var added = values. + (item)
-    if (added.size > maxSize) {
-      added = added.dropRight(1)
-    }
-    LimitedSortedSet(maxSize, added)
-  }
-
-  def partition(p: T => Boolean): (LimitedSortedSet[T], LimitedSortedSet[T]) = {
-    val(l, r) = values.partition(p)
-    (LimitedSortedSet(maxSize, l), LimitedSortedSet(maxSize, r))
-  }
-
-  def take(n: Int): LimitedSortedSet[T] = {
-    LimitedSortedSet(maxSize, values.take(n))
-  }
-
-}
-
 // FiberSensor is the FiberCache info recorder on Driver, it contains a file cache location mapping
 // (for cache locality) and metrics info
 private[sql] class FiberSensor extends Logging {
 
-  private val fileToHosts = new ConcurrentHashMap[String, LimitedSortedSet[HostFiberCache]]
+  case class HostFiberCache(host: String, status: FiberCacheStatus)
+      extends Ordered[HostFiberCache] {
+    override def compare(another: HostFiberCache): Int = {
+      status.cachedFiberCount - another.status.cachedFiberCount
+    }
+  }
 
-  private def updateRecordingMap(fromHost: String, commingStatus: FiberCacheStatus) = synchronized {
+  private[filecache] val fileToHosts = new ConcurrentHashMap[String, ArrayBuffer[HostFiberCache]]
+
+  private[filecache] def updateRecordingMap(fromHost: String, commingStatus: FiberCacheStatus) =
+    synchronized {
     val currentHostsForFile = fileToHosts.getOrDefault(
-      commingStatus.file, new LimitedSortedSet[HostFiberCache](FiberSensor.MAX_HOSTS_MAINTAINED))
+      commingStatus.file, new ArrayBuffer[HostFiberCache](0))
     val (_, theRest) = currentHostsForFile.partition(_.host == fromHost)
-    val newHostsForFile = theRest + (HostFiberCache(fromHost, commingStatus))
+    val newHostsForFile = (HostFiberCache(fromHost, commingStatus) +: theRest)
+      .sorted.takeRight(FiberSensor.MAX_HOSTS_MAINTAINED)
     fileToHosts.put(commingStatus.file, newHostsForFile)
   }
 
-  private def discardOutdatedInfo(host: String) = synchronized {
-    for ((k: String, v: LimitedSortedSet[HostFiberCache]) <- fileToHosts.asScala) {
+  private[filecache] def discardOutdatedInfo(host: String) = synchronized {
+    for ((k: String, v: ArrayBuffer[HostFiberCache]) <- fileToHosts.asScala) {
       val(_, kept) = v.partition(_.host == host)
       fileToHosts.put(k, kept)
     }
@@ -131,9 +108,8 @@ private[sql] class FiberSensor extends Logging {
    * @return
    */
   def getHosts(filePath: String): Seq[String] = {
-    fileToHosts.getOrDefault(
-      filePath, LimitedSortedSet[HostFiberCache](0))
-        .take(FiberSensor.NUM_GET_HOSTS).values.map(_.host).toSeq
+    fileToHosts.getOrDefault(filePath, new ArrayBuffer[HostFiberCache](0))
+      .sorted.takeRight(FiberSensor.NUM_GET_HOSTS).reverse.map(_.host)
   }
 }
 

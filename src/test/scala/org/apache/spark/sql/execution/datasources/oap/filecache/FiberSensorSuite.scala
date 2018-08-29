@@ -229,28 +229,28 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     assert(getAns(filePath).length == FiberSensor.NUM_GET_HOSTS)
   }
 
-  test("Limited size SortedSet") {
-    class A(a: Int) extends Ordering[A] {
-      // Reverse order
-      override def compare(x: A, y: A): Int = y.a - x.a
+  test("updateRecordingMap will preserve at most FiberSensor.MAX_HOSTS_MAINTAINED records for " +
+      "each file") {
+
+    val filePath = "file"
+    val groupCount = 30
+    val fieldCount = 3
+
+    val host = "host"
+    val execId = "executor"
+    val bitSet1 = new BitSet(90)
+
+    (0 until FiberSensor.MAX_HOSTS_MAINTAINED + 1).foreach { i =>
+      // The host on the next have more Fibers than this one
+      bitSet1.set(i)
+      val status = FiberCacheStatus(filePath, bitSet1, groupCount, fieldCount)
+      fiberSensor.updateRecordingMap(s"$host$i $execId$i", status)
+      // After inserting the MAX + 1 th Fiber, will still be MAX records
+      if (i != FiberSensor.MAX_HOSTS_MAINTAINED) {
+        assert(fiberSensor.fileToHosts.get(filePath).length == i + 1)
+      }
     }
 
-    val a1 = new A(1)
-    val a2 = new A(2)
-    val a3 = new A(3)
-    val a4 = new A(4)
-
-    var set = new LimitedSortedSet[A](2)
-    set += a2
-    assert(set.values.toSeq === Seq(a2))
-
-    set += a4
-    assert(set.values.toSeq == Seq(a4, a2))
-
-    set += a3
-    assert(set.values.toSeq === Seq(a4, a3))
-
-    set += a1
-    assert(set.values.toSeq === Seq(a4, a3))
+    assert(fiberSensor.fileToHosts.get(filePath).length == FiberSensor.MAX_HOSTS_MAINTAINED)
   }
 }
