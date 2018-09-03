@@ -32,8 +32,10 @@ import org.apache.spark.util.{RpcUtils, Utils}
  * [[FiberSensor]], [[OapMetricsManager]], [[OapRpcManager]], [[DataFileMetaCacheManager]]
  */
 private[oap] trait OapRuntime extends Logging {
-  def sparkSession: SparkSession = null
-  def fiberSensor: FiberSensor = null
+  // The following two will be override for Driver side, nevertheless calling it from Executor side
+  // will cause Exception due to it shouldn't be called there
+  def sparkSession: SparkSession = throw OapRuntime.newException
+  def fiberSensor: FiberSensor = throw OapRuntime.newException
   def memoryManager: MemoryManager
   def fiberCacheManager: FiberCacheManager
   def oapRpcManager: OapRpcManager
@@ -183,4 +185,7 @@ object OapRuntime {
       runtime.stop()
     }
   }
+
+  private def newException = new OapException("Not initialized! Probably tried to get a driver" +
+    " side only field from executor side")
 }
