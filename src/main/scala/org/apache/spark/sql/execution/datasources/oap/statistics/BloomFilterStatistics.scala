@@ -113,9 +113,11 @@ private[oap] class BloomFilterStatisticsWriter(
   protected var bfIndex: BloomFilter = new BloomFilter(bfMaxBits, bfHashFuncs)()
 
   private lazy val bfMaxBits: Int = conf.getInt(
-    OapConf.OAP_BLOOMFILTER_MAXBITS.key, OapConf.OAP_BLOOMFILTER_MAXBITS.defaultValue.get)
+    OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_MAXBITS.key,
+    OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_MAXBITS.defaultValue.get)
   private lazy val bfHashFuncs: Int = conf.getInt(
-    OapConf.OAP_BLOOMFILTER_NUMHASHFUNC.key, OapConf.OAP_BLOOMFILTER_NUMHASHFUNC.defaultValue.get)
+    OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_NUMHASHFUNC.key,
+    OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_NUMHASHFUNC.defaultValue.get)
 
   @transient
   private lazy val projectors: Array[UnsafeProjection] = schema.zipWithIndex.map(x =>

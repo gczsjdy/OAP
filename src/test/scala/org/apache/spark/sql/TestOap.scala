@@ -39,5 +39,5 @@ class TestOapContext(
   protected def sqlContext: SQLContext = sparkSession.sqlContext
 
   // OapStrategy conflicts with EXECUTOR_INDEX_SELECTION.
-  sqlContext.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "false")
+  sqlContext.setConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key, "false")
 }

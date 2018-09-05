@@ -197,7 +197,7 @@ abstract class BTreeIndexRecordWriter(
   }
 
   protected val rowIdListSizePerSection: Int =
-    configuration.getInt(OapConf.OAP_BTREE_ROW_LIST_PART_SIZE.key, 1024 * 1024)
+    configuration.getInt(OapConf.OAP_INDEX_BTREE_ROW_LIST_PART_SIZE.key, 1024 * 1024)
   protected val rowIdListPartLengthArray = new ArrayBuffer[Int]()
 
   private def storeRowId(id: Int, buf: ByteArrayOutputStream, writer: IndexFileWriter): Unit = {

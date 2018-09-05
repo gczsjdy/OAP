@@ -58,11 +58,11 @@ trait SharedOapContextBase extends SharedSQLContext {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.sqlContext.setConf(OapConf.OAP_BTREE_ROW_LIST_PART_SIZE, 64)
+    spark.sqlContext.setConf(OapConf.OAP_INDEX_BTREE_ROW_LIST_PART_SIZE, 64)
   }
 
   // disable file based cbo for all test suite, as it always fails.
-  oapSparkConf.set(OapConf.OAP_EXECUTOR_INDEX_SELECTION_FILE_POLICY.key, "false")
+  oapSparkConf.set(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION_FILE_POLICY.key, "false")
 
   protected lazy val configuration: Configuration = spark.sessionState.newHadoopConf()
 

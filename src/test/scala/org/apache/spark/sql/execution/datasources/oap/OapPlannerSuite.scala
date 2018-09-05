@@ -84,13 +84,13 @@ class OapPlannerSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(OapConf.OAP_ENABLE_OPTIMIZATION_STRATEGIES.key, true)
+    spark.conf.set(OapConf.OAP_STRATEGIES_ENABLED.key, true)
   }
 
   override def afterAll(): Unit = {
     spark.conf.set(
-      OapConf.OAP_ENABLE_OPTIMIZATION_STRATEGIES.key,
-      OapConf.OAP_ENABLE_OPTIMIZATION_STRATEGIES.defaultValue.get)
+      OapConf.OAP_STRATEGIES_ENABLED.key,
+      OapConf.OAP_STRATEGIES_ENABLED.defaultValue.get)
     spark.stop()
     super.afterAll()
   }
@@ -279,12 +279,12 @@ class OapPlannerSuite
       checkKeywordsExist(sql("explain " + sqlString), "*OapAggregationFileScanExec")
       val oapDF = sql(sqlString).collect()
 
-      spark.sqlContext.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "true")
+      spark.sqlContext.setConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key, "true")
       checkKeywordsNotExist(sql("explain " + sqlString), "OapAggregationFileScanExec")
       val baseDF = sql(sqlString)
       checkAnswer(baseDF, oapDF)
     } finally {
-      spark.sqlContext.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "false")
+      spark.sqlContext.setConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key, "false")
       sql("drop oindex index1 on oap_fix_length_schema_table")
     }
   }

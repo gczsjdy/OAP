@@ -54,8 +54,8 @@ class StatisticsWriteManager {
   // which is created from `SparkUtils`, hence containing all spark config values.
   def initialize(indexType: OapIndexType, s: StructType, conf: Configuration): Unit = {
     val statsTypes = StatisticsManager.statisticsTypeMap(indexType).filter { statType =>
-      val typeFromConfig = conf.get(OapConf.OAP_STATISTICS_TYPES.key,
-        OapConf.OAP_STATISTICS_TYPES.defaultValueString).split(",").map(_.trim)
+      val typeFromConfig = conf.get(OapConf.OAP_INDEX_STATISTICS_TYPES.key,
+        OapConf.OAP_INDEX_STATISTICS_TYPES.defaultValueString).split(",").map(_.trim)
       typeFromConfig.contains(statType)
     }
     schema = s
@@ -137,7 +137,8 @@ object StatisticsManager {
       intervalArray: ArrayBuffer[RangeInterval],
       conf: Configuration): StatsAnalysisResult = {
     val fullScanThreshold = conf.getDouble(
-      OapConf.OAP_FULL_SCAN_THRESHOLD.key, OapConf.OAP_FULL_SCAN_THRESHOLD.defaultValue.get)
+      OapConf.OAP_INDEX_FULL_SCAN_THRESHOLD.key,
+      OapConf.OAP_INDEX_FULL_SCAN_THRESHOLD.defaultValue.get)
     val analysisResults = stats.map(_.analyse(intervalArray))
 
     if (analysisResults.exists(_ == StatsAnalysisResult.SKIP_INDEX)) {

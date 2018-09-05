@@ -82,7 +82,7 @@ private[spark] class OapRpcManagerSlave(
     }
 
     val intervalMs = conf.getTimeAsMs(
-      OapConf.OAP_HEARTBEAT_INTERVAL.key, OapConf.OAP_HEARTBEAT_INTERVAL.defaultValue.get)
+      OapConf.OAP_RPC_HEARTBEAT_INTERVAL.key, OapConf.OAP_RPC_HEARTBEAT_INTERVAL.defaultValue.get)
 
     // Wait a random interval so the heartbeats don't end up in sync
     val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]

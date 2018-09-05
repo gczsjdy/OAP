@@ -86,13 +86,13 @@ private[oap] abstract class IndexScanner(idxMeta: IndexMeta)
       logDebug("No index file exist for data file: " + dataPath)
       StatsAnalysisResult.FULL_SCAN
     } else {
-      val enableIndex = conf.getBoolean(OapConf.OAP_ENABLE_OINDEX.key,
-        OapConf.OAP_ENABLE_OINDEX.defaultValue.get)
+      val enableIndex = conf.getBoolean(OapConf.OAP_INDEX_ENABLED.key,
+        OapConf.OAP_INDEX_ENABLED.defaultValue.get)
       if (!enableIndex) {
         StatsAnalysisResult.FULL_SCAN
       } else {
-        val enableIndexSelection = conf.getBoolean(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key,
-          OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.defaultValue.get)
+        val enableIndexSelection = conf.getBoolean(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key,
+          OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.defaultValue.get)
         if (!enableIndexSelection) {
           // Index selection is disabled, executor always uses the index
           StatsAnalysisResult.USE_INDEX
@@ -114,11 +114,11 @@ private[oap] abstract class IndexScanner(idxMeta: IndexMeta)
     val fs = dataPath.getFileSystem(conf)
     require(fs.isFile(indexPath), s"Index file path $indexPath is a directory, it should be a file")
 
-    // Policy 3: index file size < data file size)
+    // Policy 3: index file size < data file size * ratio)
 
     val filePolicyEnable =
-      conf.getBoolean(OapConf.OAP_EXECUTOR_INDEX_SELECTION_FILE_POLICY.key,
-        OapConf.OAP_EXECUTOR_INDEX_SELECTION_FILE_POLICY.defaultValue.get)
+      conf.getBoolean(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION_FILE_POLICY.key,
+        OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION_FILE_POLICY.defaultValue.get)
 
     val indexFileSize = fs.getFileStatus(indexPath).getLen
     val dataFileSize = fs.getFileStatus(dataPath).getLen
@@ -129,8 +129,8 @@ private[oap] abstract class IndexScanner(idxMeta: IndexMeta)
       StatsAnalysisResult.FULL_SCAN
     } else {
       val statsPolicyEnable =
-        conf.getBoolean(OapConf.OAP_EXECUTOR_INDEX_SELECTION_STATISTICS_POLICY.key,
-          OapConf.OAP_EXECUTOR_INDEX_SELECTION_STATISTICS_POLICY.defaultValue.get)
+        conf.getBoolean(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION_STATISTICS_POLICY.key,
+          OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION_STATISTICS_POLICY.defaultValue.get)
 
       // Policy 4: statistics tells the scan cost
       if (statsPolicyEnable) {

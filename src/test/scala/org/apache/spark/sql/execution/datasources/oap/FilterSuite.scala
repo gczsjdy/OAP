@@ -41,12 +41,12 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   override def beforeAll(): Unit = {
     super.beforeAll()
     // In this suite we don't want to skip index even if the cost is higher.
-    defaultEis = sqlContext.conf.getConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION)
-    sqlContext.conf.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION, false)
+    defaultEis = sqlContext.conf.getConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION)
+    sqlContext.conf.setConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION, false)
   }
 
   override def afterAll(): Unit = {
-    sqlContext.conf.setConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION, defaultEis)
+    sqlContext.conf.setConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION, defaultEis)
     super.afterAll()
   }
 
@@ -100,9 +100,10 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
   }
 
   test("test oap row group size change") {
-    val previousRowGroupSize = sqlContext.conf.getConfString(OapConf.OAP_ROW_GROUP_SIZE.key)
+    val previousRowGroupSize =
+      sqlContext.conf.getConfString(OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.key)
     // change default row group size
-    sqlContext.conf.setConfString(OapConf.OAP_ROW_GROUP_SIZE.key, "1025")
+    sqlContext.conf.setConfString(OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.key, "1025")
     val data: Seq[(Int, String)] = (1 to 3000).map { i => (i, s"this is test $i") }
     data.toDF("key", "value").createOrReplaceTempView("t")
     checkAnswer(sql("SELECT * FROM oap_test"), Seq.empty[Row])
@@ -110,10 +111,10 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
     checkAnswer(sql("SELECT * FROM oap_test"), data.map { row => Row(row._1, row._2) })
     // set back to default value
     if (previousRowGroupSize == null) {
-      sqlContext.conf.setConfString(OapConf.OAP_ROW_GROUP_SIZE.key,
-        OapConf.OAP_ROW_GROUP_SIZE.defaultValueString)
+      sqlContext.conf.setConfString(OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.key,
+        OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.defaultValueString)
     } else {
-      sqlContext.conf.setConfString(OapConf.OAP_ROW_GROUP_SIZE.key,
+      sqlContext.conf.setConfString(OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.key,
         previousRowGroupSize)
     }
   }
@@ -1056,7 +1057,7 @@ class FilterSuite extends QueryTest with SharedOapContext with BeforeAndAfterEac
 
     data.toDF("key", "value").createOrReplaceTempView("t")
     sql("insert overwrite table parquet_test select * from t")
-    withSQLConf(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key -> "true") {
+    withSQLConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key -> "true") {
       withIndex(TestIndex("parquet_test", "index1")) {
         sql("create oindex index1 on parquet_test (a)")
         // 13, 26, 39, 52 not in this file

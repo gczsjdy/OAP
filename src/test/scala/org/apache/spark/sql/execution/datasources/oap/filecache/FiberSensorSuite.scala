@@ -71,7 +71,7 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     // make each dataFile has 2 rowGroup.
     // 3000 columns in total, 2 data file by default, 1500 columns each file.
     // So, each file will have 2 rowGroup.
-    sqlContext.conf.setConfString(OapConf.OAP_ROW_GROUP_SIZE.key, "1000")
+    sqlContext.conf.setConfString(OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.key, "1000")
 
     // Insert data, build index and query, expected hit-index, range ensure all
     // row groups are cached.
@@ -139,7 +139,7 @@ class FiberSensorSuite extends QueryTest with SharedOapContext with BeforeAndAft
     // Test normal msg
     CacheStats.reset
     val conf: SparkConf = new SparkConf()
-    conf.set(OapConf.OAP_UPDATE_FIBER_CACHE_METRICS_INTERVAL_SEC.key, 0L.toString)
+    conf.set(OapConf.OAP_METRICS_UPDATE_FIBER_CACHE_INTERVAL_SEC.key, 0L.toString)
     val cacheStats = CacheStats(2, 19, 10, 2, 0, 0, 213, 23, 23, 123131, 2)
     listener.onOtherEvent(SparkListenerCustomInfoUpdate(
       host, execID, messager, CacheStats.status(cacheStats, conf)))

@@ -62,7 +62,7 @@ class PartByValueStatisticsSuite extends StatisticsTest {
     assert(fiber.getInt(offset) == StatisticsType.TYPE_PART_BY_VALUE)
     offset += 4
 
-    val part = OapConf.OAP_STATISTICS_PART_NUM.defaultValue.get + 1
+    val part = OapConf.OAP_INDEX_STATISTICS_PART_NUM.defaultValue.get + 1
     val cntPerPart = keys.length / (part - 1)
     assert(fiber.getInt(offset) == part)
     offset += 4

@@ -54,8 +54,8 @@ class BloomFilterStatisticsSuite extends StatisticsTest {
   test("write function test") {
     val keys = Random.shuffle(1 to 300).map(i => rowGen(i)).toArray
 
-    val maxBits = OapConf.OAP_BLOOMFILTER_MAXBITS.defaultValue.get
-    val numOfHashFunc = OapConf.OAP_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
+    val maxBits = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_MAXBITS.defaultValue.get
+    val numOfHashFunc = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
     val bfIndex = new BloomFilter(maxBits, numOfHashFunc)()
     val boundReference = schema.zipWithIndex.map(x =>
       BoundReference(x._2, x._1.dataType, nullable = true))
@@ -93,8 +93,8 @@ class BloomFilterStatisticsSuite extends StatisticsTest {
   test("read function test") {
     val keys = Random.shuffle(1 to 300).map(i => rowGen(i)).toArray
 
-    val maxBits = OapConf.OAP_BLOOMFILTER_MAXBITS.defaultValue.get
-    val numOfHashFunc = OapConf.OAP_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
+    val maxBits = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_MAXBITS.defaultValue.get
+    val numOfHashFunc = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
     val bfIndex = new BloomFilter(maxBits, numOfHashFunc)()
     val boundReference = schema.zipWithIndex.map(x =>
       BoundReference(x._2, x._1.dataType, nullable = true))
@@ -122,8 +122,8 @@ class BloomFilterStatisticsSuite extends StatisticsTest {
   test("read AND write test") {
     val keys = Random.shuffle(1 to 300).map(i => rowGen(i)).toArray
 
-    val maxBits = OapConf.OAP_BLOOMFILTER_MAXBITS.defaultValue.get
-    val numOfHashFunc = OapConf.OAP_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
+    val maxBits = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_MAXBITS.defaultValue.get
+    val numOfHashFunc = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
     val bfIndex = new BloomFilter(maxBits, numOfHashFunc)()
     val boundReference = schema.zipWithIndex.map(x =>
       BoundReference(x._2, x._1.dataType, nullable = true))
@@ -155,8 +155,8 @@ class BloomFilterStatisticsSuite extends StatisticsTest {
   test("test analyze function") {
     val keys = Random.shuffle(1 to 300).map(i => rowGen(i)).toArray
 
-    val maxBits = OapConf.OAP_BLOOMFILTER_MAXBITS.defaultValue.get
-    val numOfHashFunc = OapConf.OAP_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
+    val maxBits = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_MAXBITS.defaultValue.get
+    val numOfHashFunc = OapConf.OAP_INDEX_STATISTICS_BLOOMFILTER_NUMHASHFUNC.defaultValue.get
     val bfIndex = new BloomFilter(maxBits, numOfHashFunc)()
     val boundReference = schema.zipWithIndex.map(x =>
       BoundReference(x._2, x._1.dataType, nullable = true))

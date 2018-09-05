@@ -28,8 +28,8 @@ class CombiningIndexSuite extends QueryTest with SharedOapContext with BeforeAnd
   private var currentPath: String = _
 
   override def beforeEach(): Unit = {
-    spark.conf.set(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE.key, "2")
-    spark.conf.set(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key, "true")
+    spark.conf.set(OapConf.OAP_INDEX_INDEXER_CHOICE_MAX_SIZE.key, "2")
+    spark.conf.set(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key, "true")
     spark.conf.set(OapConf.OAP_INDEX_FILE_SIZE_MAX_RATIO.key, "1000")
     val path = Utils.createTempDir().getAbsolutePath
     currentPath = path
@@ -45,8 +45,8 @@ class CombiningIndexSuite extends QueryTest with SharedOapContext with BeforeAnd
   override def afterEach(): Unit = {
     sqlContext.dropTempTable("oap_test")
     sqlContext.dropTempTable("parquet_test")
-    spark.conf.unset(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE.key)
-    spark.conf.unset(OapConf.OAP_ENABLE_EXECUTOR_INDEX_SELECTION.key)
+    spark.conf.unset(OapConf.OAP_INDEX_INDEXER_CHOICE_MAX_SIZE.key)
+    spark.conf.unset(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION.key)
     spark.conf.unset(OapConf.OAP_INDEX_FILE_SIZE_MAX_RATIO.key)
   }
 

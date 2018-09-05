@@ -153,7 +153,8 @@ private[oap] class PartByValueStatisticsWriter(schema: StructType, conf: Configu
   override val id: Int = StatisticsType.TYPE_PART_BY_VALUE
 
   private lazy val maxPartNum: Int = conf.getInt(
-    OapConf.OAP_STATISTICS_PART_NUM.key, OapConf.OAP_STATISTICS_PART_NUM.defaultValue.get)
+    OapConf.OAP_INDEX_STATISTICS_PART_NUM.key,
+    OapConf.OAP_INDEX_STATISTICS_PART_NUM.defaultValue.get)
   @transient private lazy val ordering = GenerateOrdering.create(schema)
 
   protected lazy val metas: ArrayBuffer[PartedByValueMeta] = new ArrayBuffer[PartedByValueMeta]()

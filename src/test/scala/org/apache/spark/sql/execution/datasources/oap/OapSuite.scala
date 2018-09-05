@@ -97,11 +97,11 @@ class OapSuite extends QueryTest with SharedOapContext with BeforeAndAfter {
       "lZo",
       "UNCOMPRESSED",
       "UnCompressed").foreach { codec =>
-      sqlContext.conf.setConfString(OapConf.OAP_COMPRESSION.key, codec)
+      sqlContext.conf.setConfString(OapConf.OAP_IO_COMPRESSION.key, codec)
       val df = sqlContext.read.format("oap").load(path.getAbsolutePath)
       df.write.format("oap").mode(SaveMode.Overwrite).save(path.getAbsolutePath)
       val compressionType =
-        sqlContext.conf.getConfString(OapConf.OAP_COMPRESSION.key).toLowerCase
+        sqlContext.conf.getConfString(OapConf.OAP_IO_COMPRESSION.key).toLowerCase
       val fileNameIterator = path.listFiles()
       for (fileName <- fileNameIterator) {
         if (fileName.toString.endsWith(OapFileFormat.OAP_DATA_EXTENSION)) {
@@ -116,7 +116,7 @@ class OapSuite extends QueryTest with SharedOapContext with BeforeAndAfter {
     }
     // Restore compression type back to default.
     sqlContext.conf.setConfString(
-      OapConf.OAP_COMPRESSION.key, OapConf.OAP_COMPRESSION.defaultValueString)
+      OapConf.OAP_IO_COMPRESSION.key, OapConf.OAP_IO_COMPRESSION.defaultValueString)
   }
 
   test("Enable/disable using OAP index after the index is created already") {
@@ -160,10 +160,10 @@ class OapSuite extends QueryTest with SharedOapContext with BeforeAndAfter {
         OapRuntime.getOrCreate.oapMetricsManager, conf)
       val itIndex = readerIndex.initialize()
       assert(itIndex.size == 4)
-      conf.setBoolean(OapConf.OAP_ENABLE_OINDEX.key, false)
+      conf.setBoolean(OapConf.OAP_INDEX_ENABLED.key, false)
       val itSetIgnoreIndex = readerIndex.initialize()
       assert(itSetIgnoreIndex.size == 100)
-      conf.setBoolean(OapConf.OAP_ENABLE_OINDEX.key, true)
+      conf.setBoolean(OapConf.OAP_INDEX_ENABLED.key, true)
       val itSetUseIndex = readerIndex.initialize()
       assert(itSetUseIndex.size == 4)
       dir.delete()

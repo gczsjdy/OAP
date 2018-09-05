@@ -38,7 +38,7 @@ private[index] case class BTreeIndexRecordReaderV1(
   protected var meta: BTreeMeta = _
 
   protected[index] val rowIdListSizePerSection: Int =
-    configuration.getInt(OapConf.OAP_BTREE_ROW_LIST_PART_SIZE.key, 1024 * 1024)
+    configuration.getInt(OapConf.OAP_INDEX_BTREE_ROW_LIST_PART_SIZE.key, 1024 * 1024)
 
   protected[index] def initializeReader(): Unit = {
     val sectionLengthIndex = fileReader.getLen - FOOTER_LENGTH_SIZE - ROW_ID_LIST_LENGTH_SIZE

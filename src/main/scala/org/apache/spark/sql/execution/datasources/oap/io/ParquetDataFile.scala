@@ -77,8 +77,8 @@ private[oap] case class ParquetDataFile(
     OapRuntime.getOrCreate.dataFileMetaCacheManager.get(this).asInstanceOf[ParquetDataFileMeta]
   private val file = new Path(StringUtils.unEscapeString(path))
   private val parquetDataCacheEnable =
-    configuration.getBoolean(OapConf.OAP_PARQUET_DATA_CACHE_ENABLED.key,
-      OapConf.OAP_PARQUET_DATA_CACHE_ENABLED.defaultValue.get)
+    configuration.getBoolean(OapConf.OAP_CACHE_PARQUET_DATA_FILE_ENABLED.key,
+      OapConf.OAP_CACHE_PARQUET_DATA_FILE_ENABLED.defaultValue.get)
 
   private var fiberDataReader: ParquetFiberDataReader = _
 

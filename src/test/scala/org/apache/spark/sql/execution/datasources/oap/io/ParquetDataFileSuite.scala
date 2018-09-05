@@ -447,13 +447,13 @@ class ParquetCacheDataSuite extends ParquetDataFileSuite {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    configuration.setBoolean(OapConf.OAP_PARQUET_DATA_CACHE_ENABLED.key, true)
+    configuration.setBoolean(OapConf.OAP_CACHE_PARQUET_DATA_FILE_ENABLED.key, true)
     OapRuntime.getOrCreate.fiberCacheManager.clearAllFibers()
   }
 
   override def afterEach(): Unit = {
     super.afterEach()
-    configuration.unset(OapConf.OAP_PARQUET_DATA_CACHE_ENABLED.key)
+    configuration.unset(OapConf.OAP_CACHE_PARQUET_DATA_FILE_ENABLED.key)
   }
 
   override def data: Seq[Group] = {

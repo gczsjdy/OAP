@@ -118,10 +118,11 @@ private[sql] class OapFileFormat extends FileFormat
 
     // First use table option, if not, use SqlConf, else, use default value.
     conf.set(OapFileFormat.COMPRESSION, options.getOrElse("compression",
-      sparkSession.conf.get(OapConf.OAP_COMPRESSION.key, OapFileFormat.DEFAULT_COMPRESSION)))
+      sparkSession.conf.get(OapConf.OAP_IO_COMPRESSION.key, OapFileFormat.DEFAULT_COMPRESSION)))
 
     conf.set(OapFileFormat.ROW_GROUP_SIZE, options.getOrElse("rowgroup",
-      sparkSession.conf.get(OapConf.OAP_ROW_GROUP_SIZE.key, OapFileFormat.DEFAULT_ROW_GROUP_SIZE)))
+      sparkSession.conf.get(
+        OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.key, OapFileFormat.DEFAULT_ROW_GROUP_SIZE)))
 
     new OapOutputWriterFactory(
       dataSchema,
@@ -216,7 +217,7 @@ private[sql] class OapFileFormat extends FileFormat
             supportFilters.foreach(filter => logDebug("\t" + filter.toString))
             // get index options such as limit, order, etc.
             val indexOptions = options.filterKeys(OapFileFormat.oapOptimizationKeySeq.contains(_))
-            val maxChooseSize = sparkSession.conf.get(OapConf.OAP_INDEXER_CHOICE_MAX_SIZE)
+            val maxChooseSize = sparkSession.conf.get(OapConf.OAP_INDEX_INDEXER_CHOICE_MAX_SIZE)
             val indexDisableList = sparkSession.conf.get(OapConf.OAP_INDEX_DISABLE_LIST)
             ScannerBuilder.build(supportFilters, ic, indexOptions, maxChooseSize, indexDisableList)
           }
@@ -301,7 +302,7 @@ private[sql] class OapFileFormat extends FileFormat
   def hasAvailableIndex(
       expressions: Seq[Expression],
       requiredTypes: Seq[IndexType] = Nil): Boolean = {
-    if (expressions.nonEmpty && sparkSession.conf.get(OapConf.OAP_ENABLE_OINDEX)) {
+    if (expressions.nonEmpty && sparkSession.conf.get(OapConf.OAP_INDEX_ENABLED)) {
       meta match {
         case Some(m) if requiredTypes.isEmpty =>
           expressions.exists(m.isSupportedByIndex(_, None))
@@ -443,9 +444,9 @@ private[sql] object OapFileFormat {
   val PARQUET_DATA_FILE_CLASSNAME = classOf[ParquetDataFile].getCanonicalName
 
   val COMPRESSION = "oap.compression"
-  val DEFAULT_COMPRESSION = OapConf.OAP_COMPRESSION.defaultValueString
+  val DEFAULT_COMPRESSION = OapConf.OAP_IO_COMPRESSION.defaultValueString
   val ROW_GROUP_SIZE = "oap.rowgroup.size"
-  val DEFAULT_ROW_GROUP_SIZE = OapConf.OAP_ROW_GROUP_SIZE.defaultValueString
+  val DEFAULT_ROW_GROUP_SIZE = OapConf.OAP_OAPFILEFORMAT_ROWGROUP_SIZE.defaultValueString
 
   /**
    * Oap Optimization Options.
