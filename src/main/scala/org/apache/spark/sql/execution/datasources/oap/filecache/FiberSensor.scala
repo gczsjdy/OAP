@@ -27,6 +27,8 @@ import com.google.common.base.Throwables
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.oap.filecache.FiberSensor.HostFiberCache
 import org.apache.spark.sql.execution.datasources.oap.utils.CacheStatusSerDe
+import org.apache.spark.sql.internal.oap.OapConf
+import org.apache.spark.sql.oap.OapRuntime
 import org.apache.spark.sql.oap.listener.SparkListenerCustomInfoUpdate
 import org.apache.spark.util.collection.BitSet
 
@@ -120,8 +122,14 @@ private[sql] object FiberSensor {
     }
   }
 
-  val NUM_GET_HOSTS = 2
-  val MAX_HOSTS_MAINTAINED = 8
+  private def conf = OapRuntime.getOrCreate.sparkSession.conf
+
+  val NUM_GET_HOSTS = conf.get(
+    OapConf.OAP_CACHE_FIBERSENSOR_GETHOSTS_NUM,
+    OapConf.OAP_CACHE_FIBERSENSOR_GETHOSTS_NUM.defaultValue.get)
+  val MAX_HOSTS_MAINTAINED = conf.get(
+    OapConf.OAP_CACHE_FIBERSENSOR_MAXHOSTSMAINTAINED_NUM,
+    OapConf.OAP_CACHE_FIBERSENSOR_MAXHOSTSMAINTAINED_NUM.defaultValue.get)
   val OAP_CACHE_HOST_PREFIX = "OAP_HOST_"
   val OAP_CACHE_EXECUTOR_PREFIX = "_OAP_EXECUTOR_"
 }

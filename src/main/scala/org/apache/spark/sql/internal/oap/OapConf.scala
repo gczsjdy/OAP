@@ -126,6 +126,21 @@ object OapConf {
       .stringConf
       .createWithDefault("offheap")
 
+  val OAP_CACHE_FIBERSENSOR_GETHOSTS_NUM =
+    SqlConfAdapter.buildConf("spark.sql.oap.fiberCache.fiberSensor.getHostsNum")
+      .internal()
+      .doc("The length of getHosts function of FiberSensor's result Seq. The funcion returns " +
+        "getHostsNum of hosts with the maximum FiberCache for certain filePath")
+      .intConf
+      .createWithDefault(3)
+
+  val OAP_CACHE_FIBERSENSOR_MAXHOSTSMAINTAINED_NUM =
+    SqlConfAdapter.buildConf("spark.sql.oap.fiberCache.fiberSensor.maxHostsMaintainedNum")
+      .internal()
+      .doc("The maximum maintained number of hosts number for a certain filePath in FiberSensor")
+      .intConf
+      .createWithDefault(10)
+
   val OAP_COMPRESSION = SqlConfAdapter.buildConf("spark.sql.oap.compression.codec")
     .internal()
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
