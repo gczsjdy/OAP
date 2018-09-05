@@ -137,8 +137,8 @@ object StatisticsManager {
       intervalArray: ArrayBuffer[RangeInterval],
       conf: Configuration): StatsAnalysisResult = {
     val fullScanThreshold = conf.getDouble(
-      OapConf.OAP_INDEX_FULL_SCAN_THRESHOLD.key,
-      OapConf.OAP_INDEX_FULL_SCAN_THRESHOLD.defaultValue.get)
+      OapConf.OAP_INDEX_STATISTICS_FULL_SCAN_THRESHOLD.key,
+      OapConf.OAP_INDEX_STATISTICS_FULL_SCAN_THRESHOLD.defaultValue.get)
     val analysisResults = stats.map(_.analyse(intervalArray))
 
     if (analysisResults.exists(_ == StatsAnalysisResult.SKIP_INDEX)) {

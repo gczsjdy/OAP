@@ -295,7 +295,7 @@ trait OapStrategies extends Logging {
       indexHint: Seq[Expression],
       indexRequirements: Seq[IndexType]): Option[SparkPlan] = {
     val conf = SparkSession.getActiveSession.get.sessionState.conf
-    if (!conf.getConf(OapConf.OAP_STRATEGIES_ENABLED) ||
+    if (!conf.getConf(OapConf.OAP_STRATEGY_ENABLED) ||
         conf.getConf(OapConf.OAP_INDEX_ENABLE_EXECUTOR_SELECTION)) {
       // If executor index selection (spark.sql.oap.oindex.eis.enabled) is enabled,
       // oapStrategies does not work because exeutor may skip the index scan.

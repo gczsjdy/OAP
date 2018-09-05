@@ -84,13 +84,13 @@ class OapPlannerSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    spark.conf.set(OapConf.OAP_STRATEGIES_ENABLED.key, true)
+    spark.conf.set(OapConf.OAP_STRATEGY_ENABLED.key, true)
   }
 
   override def afterAll(): Unit = {
     spark.conf.set(
-      OapConf.OAP_STRATEGIES_ENABLED.key,
-      OapConf.OAP_STRATEGIES_ENABLED.defaultValue.get)
+      OapConf.OAP_STRATEGY_ENABLED.key,
+      OapConf.OAP_STRATEGY_ENABLED.defaultValue.get)
     spark.stop()
     super.afterAll()
   }

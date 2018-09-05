@@ -34,7 +34,7 @@ object OapConf {
       .booleanConf
       .createWithDefault(true)
 
-  val OAP_INDEX_FULL_SCAN_THRESHOLD =
+  val OAP_INDEX_STATISTICS_FULL_SCAN_THRESHOLD =
     SqlConfAdapter.buildConf("spark.sql.oap.index.statistics.fullScanThreshold")
       .internal()
       .doc("Define the full scan threshold based on oap statistics in index file. " +
@@ -180,8 +180,8 @@ object OapConf {
       .booleanConf
       .createWithDefault(true)
 
-  val OAP_STRATEGIES_ENABLED =
-    SqlConfAdapter.buildConf("spark.sql.oap.strategies.enabled")
+  val OAP_STRATEGY_ENABLED =
+    SqlConfAdapter.buildConf("spark.sql.oap.strategy.enabled")
       .internal()
       .doc("To indicate if enable/disable oap strategies")
       .booleanConf
