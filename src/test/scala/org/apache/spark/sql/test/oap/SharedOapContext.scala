@@ -58,6 +58,8 @@ trait SharedOapContextBase extends SharedSQLContext {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    // Codes in like OapEnv will check isTesting by this to decide the behavior
+    System.setProperty("spark.testing", "true")
     spark.sqlContext.setConf(OapConf.OAP_BTREE_ROW_LIST_PART_SIZE, 64)
   }
 
