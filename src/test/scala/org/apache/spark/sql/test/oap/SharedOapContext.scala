@@ -24,12 +24,15 @@ import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.oap.{IndexType, OapFileFormat}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.oap.OapConf
 import org.apache.spark.sql.oap.{OapDriverRuntime, OapRuntime}
 import org.apache.spark.sql.test.{SharedSQLContext, TestOapLocalClusterSession, TestOapSession, TestSparkSession}
 
 trait SharedOapContext extends SharedOapContextBase {
+
+  // Codes in like OapEnv will check isTesting by this to decide the behavior
+  System.setProperty("spark.testing", "true")
+
   protected override def createSparkSession: TestSparkSession = {
     val testSession = new TestOapSession(oapSparkConf)
     OapRuntime.getOrCreate.asInstanceOf[OapDriverRuntime].setTestSession(testSession)
@@ -41,6 +44,7 @@ trait SharedOapContext extends SharedOapContextBase {
  * Extend this context to test in LocalClusterMode
  */
 trait SharedOapLocalClusterContext extends SharedOapContextBase {
+
   protected override def createSparkSession: TestSparkSession = {
     val testSession = new TestOapLocalClusterSession(oapSparkConf)
     OapRuntime.getOrCreate.asInstanceOf[OapDriverRuntime].setTestSession(testSession)
@@ -58,8 +62,6 @@ trait SharedOapContextBase extends SharedSQLContext {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    // Codes in like OapEnv will check isTesting by this to decide the behavior
-    System.setProperty("spark.testing", "true")
     spark.sqlContext.setConf(OapConf.OAP_BTREE_ROW_LIST_PART_SIZE, 64)
   }
 
