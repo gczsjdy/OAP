@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.remote
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleWriter}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.ExternalSorter
@@ -62,8 +62,7 @@ private[spark] class RemoteShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
-    val tmp = Utils.tempFileWith(output)
+    val tmp = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     try {
       val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
@@ -96,18 +95,6 @@ private[spark] class RemoteShuffleWriter[K, V, C](
         writeMetrics.incWriteTime(System.nanoTime - startTime)
         sorter = null
       }
-    }
-  }
-}
-
-private[spark] object SortShuffleWriter {
-  def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
-    // We cannot bypass sorting if we need to do map-side aggregation.
-    if (dep.mapSideCombine) {
-      false
-    } else {
-      val bypassMergeThreshold: Int = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
-      dep.partitioner.numPartitions <= bypassMergeThreshold
     }
   }
 }
