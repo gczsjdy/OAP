@@ -28,6 +28,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
+import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -88,7 +89,7 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
   *
   *  - Users are expected to call stop() at the end to delete all the intermediate files.
   */
-private[spark] class ExternalSorter[K, V, C](
+private[spark] class RemoteExternalSorter[K, V, C](
     context: TaskContext,
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
@@ -689,8 +690,9 @@ private[spark] class ExternalSorter[K, V, C](
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
     val syncWrites = blockManager.conf.getBoolean("spark.shuffle.sync", false)
-    val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
-      context.taskMetrics().shuffleWriteMetrics)
+    val writer = new RemoteBlockObjectWriter(
+      outputFile, blockManager.serializerManager, serInstance, fileBufferSize, syncWrites,
+        context.taskMetrics().shuffleWriteMetrics, blockId)
 
     if (spills.isEmpty) {
       // Case where we only have in-memory data
@@ -787,7 +789,7 @@ private[spark] class ExternalSorter[K, V, C](
         val inMemoryIterator = new WritablePartitionedIterator {
           private[this] var cur = if (upstream.hasNext) upstream.next() else null
 
-          def writeNext(writer: DiskBlockObjectWriter): Unit = {
+          def writeNext(writer: RemoteBlockObjectWriter): Unit = {
             writer.write(cur._1._2, cur._2)
             cur = if (upstream.hasNext) upstream.next() else null
           }

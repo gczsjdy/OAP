@@ -17,15 +17,27 @@
 
 package org.apache.spark.shuffle.remote
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
-import java.nio.channels.FileChannel
+import java.io.{BufferedOutputStream, OutputStream}
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
-import org.apache.spark.storage.{BlockId, FileSegment, TimeTrackingOutputStream}
+import org.apache.spark.storage.{BlockId, TimeTrackingOutputStream}
 import org.apache.spark.util.Utils
+
+/**
+  * References a particular segment of a Hadoop file (potentially the entire file),
+  * based off an offset and a length.
+  */
+private[spark] class HadoopFileSegment(val file: Path, val offset: Long, val length: Long) {
+  require(offset >= 0, s"File segment offset cannot be negative (got $offset)")
+  require(length >= 0, s"File segment length cannot be negative (got $length)")
+  override def toString: String = {
+    "(name=%s, offset=%d, length=%d)".format(file.getName, offset, length)
+  }
+}
 
 /**
   * NOTE: Most of the code is copied from DiskBlockObjectWriter, as the only difference is that this
@@ -69,11 +81,10 @@ private[spark] class RemoteBlockObjectWriter(
     }
   }
 
-  /** The file channel, used for repositioning / truncating the file. */
-  private var channel: FileChannel = null
+  // No need to use a channel, instead call FSDataOutputStream.getPos
   private var mcs: ManualCloseOutputStream = null
   private var bs: OutputStream = null
-  private var fos: FileOutputStream = null
+  private var fsdos: FSDataOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
@@ -94,7 +105,7 @@ private[spark] class RemoteBlockObjectWriter(
     * -----: Current writes to the underlying file.
     * xxxxx: Committed contents of the file.
     */
-  private var committedPosition = file.length()
+  private var committedPosition = fsdos.getPos
   private var reportedPosition = committedPosition
 
   /**
@@ -105,9 +116,10 @@ private[spark] class RemoteBlockObjectWriter(
   private var numRecordsWritten = 0
 
   private def initialize(): Unit = {
-    fos = new FileOutputStream(file, true)
-    channel = fos.getChannel()
-    ts = new TimeTrackingOutputStream(writeMetrics, fos)
+    // Is this right?
+    val fs = file.getFileSystem(new Configuration)
+    fsdos = fs.create(file)
+    ts = new TimeTrackingOutputStream(writeMetrics, fsdos)
     class ManualCloseBufferedOutputStream
         extends BufferedOutputStream(ts, bufferSize) with ManualCloseOutputStream
     mcs = new ManualCloseBufferedOutputStream
@@ -137,10 +149,9 @@ private[spark] class RemoteBlockObjectWriter(
       Utils.tryWithSafeFinally {
         mcs.manualClose()
       } {
-        channel = null
         mcs = null
         bs = null
-        fos = null
+        fsdos = null
         ts = null
         objOut = null
         initialized = false
@@ -169,7 +180,7 @@ private[spark] class RemoteBlockObjectWriter(
     *
     * @return file segment with previous offset and length committed on this call.
     */
-  def commitAndGet(): FileSegment = {
+  def commitAndGet(): HadoopFileSegment = {
     if (streamOpen) {
       // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
       //       serializer stream and the lower level stream.
@@ -178,15 +189,16 @@ private[spark] class RemoteBlockObjectWriter(
       objOut.close()
       streamOpen = false
 
-      if (syncWrites) {
-        // Force outstanding writes to disk and track how long it takes
-        val start = System.nanoTime()
-        fos.getFD.sync()
-        writeMetrics.incWriteTime(System.nanoTime() - start)
-      }
+      /* Leave this first */
+//      if (syncWrites) {
+//        // Force outstanding writes to disk and track how long it takes
+//        val start = System.nanoTime()
+//        fos.getFD.sync()
+//        writeMetrics.incWriteTime(System.nanoTime() - start)
+//      }
 
-      val pos = channel.position()
-      val fileSegment = new FileSegment(file, committedPosition, pos - committedPosition)
+      val pos = fsdos.getPos
+      val fileSegment = new HadoopFileSegment(file, committedPosition, pos - committedPosition)
       committedPosition = pos
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)
@@ -194,43 +206,47 @@ private[spark] class RemoteBlockObjectWriter(
       numRecordsWritten = 0
       fileSegment
     } else {
-      new FileSegment(file, committedPosition, 0)
+      new HadoopFileSegment(file, committedPosition, 0)
     }
   }
 
 
   /**
+    * NOTE: No revert currently(when exception occurs), due to the lack of HDFS truncate API
+    *
     * Reverts writes that haven't been committed yet. Callers should invoke this function
     * when there are runtime exceptions. This method will not throw, though it may be
     * unsuccessful in truncating written data.
     *
     * @return the file that this DiskBlockObjectWriter wrote to.
     */
-  def revertPartialWritesAndClose(): File = {
+  def revertPartialWritesAndClose(): Path = {
     // Discard current writes. We do this by flushing the outstanding writes and then
     // truncating the file to its initial position.
-    Utils.tryWithSafeFinally {
-      if (initialized) {
-        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
-        writeMetrics.decRecordsWritten(numRecordsWritten)
-        streamOpen = false
-        closeResources()
-      }
-    } {
-      var truncateStream: FileOutputStream = null
-      try {
-        truncateStream = new FileOutputStream(file, true)
-        truncateStream.getChannel.truncate(committedPosition)
-      } catch {
-        case e: Exception =>
-          logError("Uncaught exception while reverting partial writes to file " + file, e)
-      } finally {
-        if (truncateStream != null) {
-          truncateStream.close()
-          truncateStream = null
-        }
-      }
-    }
+//    Utils.tryWithSafeFinally {
+//      if (initialized) {
+//        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
+//        writeMetrics.decRecordsWritten(numRecordsWritten)
+//        streamOpen = false
+//        closeResources()
+//      }
+//    } {
+//      var truncateStream: FSDataOutputStream = null
+//      try {
+//        val fs = file.getFileSystem(new Configuration)
+//        truncateStream = fs.create(file)
+//        fs.
+//        truncateStream.getChannel.truncate(committedPosition)
+//      } catch {
+//        case e: Exception =>
+//          logError("Uncaught exception while reverting partial writes to file " + file, e)
+//      } finally {
+//        if (truncateStream != null) {
+//          truncateStream.close()
+//          truncateStream = null
+//        }
+//      }
+//    }
     file
   }
 
@@ -274,7 +290,7 @@ private[spark] class RemoteBlockObjectWriter(
     * Note that this is only valid before the underlying streams are closed.
     */
   private def updateBytesWritten() {
-    val pos = channel.position()
+    val pos = fsdos.getPos
     writeMetrics.incBytesWritten(pos - reportedPosition)
     reportedPosition = pos
   }
