@@ -17,13 +17,13 @@
 
 package org.apache.spark.shuffle.remote
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.Utils
-import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.collection.RemoteExternalSorter
 
 private[spark] class RemoteShuffleWriter[K, V, C](
     shuffleBlockResolver: RemoteShuffleBlockResolver,
@@ -32,9 +32,11 @@ private[spark] class RemoteShuffleWriter[K, V, C](
     context: TaskContext)
     extends ShuffleWriter[K, V] with Logging {
 
+  private val blockManager = SparkEnv.get.blockManager
+
   private val dep = handle.dependency
 
-  private var sorter: ExternalSorter[K, V, _] = null
+  private var sorter: RemoteExternalSorter[K, V, _] = null
 
   // Are we in the process of stopping? Because map tasks can call stop() with success = true
   // and then call stop() with success = false if they get an exception, we want to make sure
@@ -48,13 +50,13 @@ private[spark] class RemoteShuffleWriter[K, V, C](
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
-      new ExternalSorter[K, V, C](
+      new RemoteExternalSorter[K, V, C](
         context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
-      new ExternalSorter[K, V, V](
+      new RemoteExternalSorter[K, V, V](
         context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
     sorter.insertAll(records)
@@ -62,15 +64,17 @@ private[spark] class RemoteShuffleWriter[K, V, C](
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val tmp = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val tmp = RemoteShuffleUtils.tempPathWith(output)
+    val fs = output.getFileSystem(new Configuration)
     try {
       val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
     } finally {
-      if (tmp.exists() && !tmp.delete()) {
-        logError(s"Error while deleting temp file ${tmp.getAbsolutePath}")
+      if (fs.exists(tmp) && !fs.delete(tmp, true)) {
+        logError(s"Error while deleting temp file ${tmp.getName}")
       }
     }
   }

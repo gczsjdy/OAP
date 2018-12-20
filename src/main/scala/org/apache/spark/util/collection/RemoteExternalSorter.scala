@@ -28,7 +28,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter
+import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleUtils}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -270,13 +270,13 @@ private[spark] class RemoteExternalSorter[K, V, C](
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
-    val (blockId, file) = diskBlockManager.createTempShuffleBlock()
+    val (blockId, file) = RemoteShuffleUtils.createTempShuffleBlock()
 
     // These variables are reset after each flush
     var objectsWritten: Long = 0
     val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
-    val writer: DiskBlockObjectWriter =
-      blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
+    val writer: RemoteBlockObjectWriter =
+      RemoteShuffleUtils.getRemoteWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
@@ -689,10 +689,9 @@ private[spark] class RemoteExternalSorter[K, V, C](
 
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
-    val syncWrites = blockManager.conf.getBoolean("spark.shuffle.sync", false)
-    val writer = new RemoteBlockObjectWriter(
-      outputFile, blockManager.serializerManager, serInstance, fileBufferSize, syncWrites,
-        context.taskMetrics().shuffleWriteMetrics, blockId)
+    val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
+    val writer = RemoteShuffleUtils.getRemoteWriter(
+      blockId, outputFile, serInstance, fileBufferSize, spillMetrics)
 
     if (spills.isEmpty) {
       // Case where we only have in-memory data
