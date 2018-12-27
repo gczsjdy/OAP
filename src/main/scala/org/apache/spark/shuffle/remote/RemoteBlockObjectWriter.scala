@@ -105,7 +105,7 @@ private[spark] class RemoteBlockObjectWriter(
     * -----: Current writes to the underlying file.
     * xxxxx: Committed contents of the file.
     */
-  private var committedPosition = fsdos.getPos
+  private var committedPosition = 0L
   private var reportedPosition = committedPosition
 
   /**

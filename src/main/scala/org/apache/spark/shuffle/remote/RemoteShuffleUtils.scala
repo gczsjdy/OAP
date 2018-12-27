@@ -21,14 +21,19 @@ import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.{BlockId, TempShuffleBlockId}
+import org.apache.spark.util.Utils
 
 object RemoteShuffleUtils {
 
   private val env = SparkEnv.get
+
+  private val applicationId =
+    if (Utils.isTesting) "testing" else SparkContext.getActive.get.applicationId
+  def getRemotePathPrefix = s"hdfs:///shuffle/${applicationId}"
 
   /**
    * Something like [[org.apache.spark.util.Utils.tempFileWith()]], instead returning Path
@@ -38,7 +43,7 @@ object RemoteShuffleUtils {
   }
 
   def getPath(blockId: BlockId): Path = {
-    new Path(blockId.name)
+    new Path(s"${blockId.name}")
   }
 
   /**
@@ -54,13 +59,17 @@ object RemoteShuffleUtils {
     (blockId, getPath(blockId))
   }
 
+  /**
+   * Something like [[org.apache.spark.storage.BlockManager.getDiskWriter()]], instead returning
+   * a RemoteBlockObjectWriter
+   */
   def getRemoteWriter(
       blockId: BlockId,
       file: Path,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
       writeMetrics: ShuffleWriteMetrics): RemoteBlockObjectWriter = {
-    val syncWrites = env.blockManager.conf.getBoolean("spark.shuffle.sync", false)
+    val syncWrites = false //env.blockManager.conf.getBoolean("spark.shuffle.sync", false)
     new RemoteBlockObjectWriter(file, env.serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)
   }

@@ -23,7 +23,8 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.ByteStreams
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
@@ -162,11 +163,12 @@ private[spark] class RemoteExternalSorter[K, V, C](
     }
   }
 
+  // NOTE: This is an HDFS version SpilledFile, compared with [[ExternalSorter.SpilledFile]]
   // Information about a spilled file. Includes sizes in bytes of "batches" written by the
   // serializer as we periodically reset its stream, as well as number of elements in each
   // partition, used to efficiently keep track of partitions when merging.
   private[this] case class SpilledFile(
-      file: File,
+      file: Path,
       blockId: BlockId,
       serializerBatchSizes: Array[Long],
       elementsPerPartition: Array[Long])
@@ -320,8 +322,9 @@ private[spark] class RemoteExternalSorter[K, V, C](
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
         writer.revertPartialWritesAndClose()
-        if (file.exists()) {
-          if (!file.delete()) {
+        val fs = file.getFileSystem(new Configuration)
+        if (fs.exists(file)) {
+          if (!fs.delete(file, true)) {
             logWarning(s"Error deleting ${file}")
           }
         }
@@ -495,7 +498,7 @@ private[spark] class RemoteExternalSorter[K, V, C](
 
     // Intermediate file and deserializer streams that read from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    var fileStream: FileInputStream = null
+    var fileStream: FSDataInputStream = null
     var deserializeStream = nextBatchStream()  // Also sets fileStream
 
     var nextItem: (K, C) = null
@@ -514,8 +517,10 @@ private[spark] class RemoteExternalSorter[K, V, C](
         }
 
         val start = batchOffsets(batchId)
-        fileStream = new FileInputStream(spill.file)
-        fileStream.getChannel.position(start)
+
+        val fs = spill.file.getFileSystem(new Configuration)
+        fileStream = fs.open(spill.file)
+        fileStream.seek(start)
         batchId += 1
 
         val end = batchOffsets(batchId)
@@ -623,9 +628,11 @@ private[spark] class RemoteExternalSorter[K, V, C](
   }
 
   /**
+    * NOTE： This basically turns a memoryIterator to a spillable(to remote storage) iterator
+    *
     * Returns a destructive iterator for iterating over the entries of this map.
-    * If this iterator is forced spill to disk to release memory when there is not enough memory,
-    * it returns pairs from an on-disk map.
+    * If this iterator is forced spill to remote storage to release memory when there is not enough
+    * memory, it returns pairs from an on-disk map.
     */
   def destructiveIterator(memoryIterator: Iterator[((Int, K), C)]): Iterator[((Int, K), C)] = {
     if (isShuffleSort) {
@@ -727,9 +734,10 @@ private[spark] class RemoteExternalSorter[K, V, C](
   }
 
   def stop(): Unit = {
-    spills.foreach(s => s.file.delete())
+    spills.foreach(s => s.file.getFileSystem(new Configuration()).delete(s.file, true))
     spills.clear()
-    forceSpillFiles.foreach(s => s.file.delete())
+    forceSpillFiles.foreach(
+      s => s.file.getFileSystem(new Configuration()).delete(s.file, true))
     forceSpillFiles.clear()
     if (map != null || buffer != null) {
       map = null // So that the memory can be garbage-collected
@@ -770,6 +778,10 @@ private[spark] class RemoteExternalSorter[K, V, C](
     }
   }
 
+  /*
+   * An iterator wrapping the collection of this ExternalSorter, it supports to spill to
+   * remote storage
+   **/
   private[this] class SpillableIterator(var upstream: Iterator[((Int, K), C)])
       extends Iterator[((Int, K), C)] {
 

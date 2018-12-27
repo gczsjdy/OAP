@@ -4,7 +4,6 @@ import java.io._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.shuffle.ShuffleBlockResolver
@@ -13,7 +12,7 @@ import org.apache.spark.util.Utils
 
 class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
 
-  private val prefix = s"hdfs:///shuffle/${SparkContext.getActive.get.applicationId}"
+  private val prefix = RemoteShuffleUtils.getRemotePathPrefix
 
   def getDataFile(shuffleId: Int, mapId: Int): Path = {
     new Path(s"${prefix}_${shuffleId}_${mapId}")
