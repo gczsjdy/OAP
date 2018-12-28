@@ -17,15 +17,24 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance, SerializerManager}
+import org.apache.spark.shuffle.remote.RemoteShuffleUtils
+import org.apache.spark.storage.TestBlockId
 
 class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   testWithMultipleSer("no sorting or partial aggregation with spilling") { (conf: SparkConf) =>
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
     basicSorterTest(conf, withPartialAgg = false, withOrdering = false, withSpilling = true)
+  }
+
+  testWithMultipleSer("basic sorter write") { (conf: SparkConf) =>
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+    basicSorterWrite(conf, withPartialAgg = false, withOrdering = false, withSpilling = true)
   }
 
   /* ============================= *
@@ -104,4 +113,54 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     assert(results === expected)
   }
 
+  private class SimpleRemoteBlockObjectReader[K, V](
+      serializerManager: SerializerManager, serializerInstance: SerializerInstance) {
+    def read(blockId: TestBlockId, file: Path): Iterator[Product2[K, V]] = {
+      val fs = file.getFileSystem(new Configuration)
+      val inputStream = fs.open(file)
+      serializerInstance.deserializeStream(
+        serializerManager.wrapStream(blockId, inputStream))
+          .asKeyValueIterator.asInstanceOf[Iterator[Product2[K, V]]]
+    }
+  }
+
+  private def basicSorterWrite(
+      conf: SparkConf,
+      withPartialAgg: Boolean,
+      withOrdering: Boolean,
+      withSpilling: Boolean) {
+    val size = 1000
+    if (withSpilling) {
+      conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
+    }
+    sc = new SparkContext("local", "test", conf)
+    val agg =
+      if (withPartialAgg) {
+        Some(new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j))
+      } else {
+        None
+      }
+    val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
+    val context = MemoryTestingUtils.fakeTaskContext(sc.env)
+    val sorter =
+      new RemoteExternalSorter[Int, Int, Int](context, agg, Some(new HashPartitioner(3)), ord)
+    sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
+    if (withSpilling) {
+      assert(sorter.numSpills > 0, "sorter did not spill")
+    } else {
+      assert(sorter.numSpills === 0, "sorter spilled")
+    }
+
+    val testBlockId = TestBlockId("hi")
+    val path = new Path(
+      s"${RemoteShuffleUtils.remotePathPrefix}/UnitTest/RemoteExternalSorterSuite/1")
+    sorter.writePartitionedFile(testBlockId, path)
+    val results =
+      new SimpleRemoteBlockObjectReader[Int, Int](
+        sc.env.serializerManager, sc.env.serializer.newInstance()).read(testBlockId, path).toSet
+    val expected = (0 until size).map { i => (i / 4, i)}.toSet
+
+    println(results.toSet.toString())
+    assert(results === expected)
+  }
 }

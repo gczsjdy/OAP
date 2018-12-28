@@ -12,7 +12,7 @@ import org.apache.spark.util.Utils
 
 class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
 
-  private val prefix = RemoteShuffleUtils.getRemotePathPrefix
+  private val prefix = RemoteShuffleUtils.remotePathPrefix
 
   def getDataFile(shuffleId: Int, mapId: Int): Path = {
     new Path(s"${prefix}_${shuffleId}_${mapId}")
@@ -162,5 +162,5 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
     }
   }
 
-  override def stop(): Unit = ???
+  override def stop(): Unit = {}
 }

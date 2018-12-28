@@ -278,7 +278,8 @@ private[spark] class RemoteExternalSorter[K, V, C](
     var objectsWritten: Long = 0
     val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
     val writer: RemoteBlockObjectWriter =
-      RemoteShuffleUtils.getRemoteWriter(blockId, file, serInstance, fileBufferSize, spillMetrics)
+      RemoteShuffleUtils.getRemoteWriter(
+        blockId, file, serializerManager, serInstance, fileBufferSize, spillMetrics)
 
     // List of batch sizes (bytes) in the order they are written to disk
     val batchSizes = new ArrayBuffer[Long]
@@ -698,7 +699,7 @@ private[spark] class RemoteExternalSorter[K, V, C](
     val lengths = new Array[Long](numPartitions)
     val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
     val writer = RemoteShuffleUtils.getRemoteWriter(
-      blockId, outputFile, serInstance, fileBufferSize, spillMetrics)
+      blockId, outputFile, serializerManager, serInstance, fileBufferSize, spillMetrics)
 
     if (spills.isEmpty) {
       // Case where we only have in-memory data
