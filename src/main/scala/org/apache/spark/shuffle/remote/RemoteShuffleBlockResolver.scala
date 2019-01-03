@@ -15,11 +15,11 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
   private val prefix = RemoteShuffleUtils.remotePathPrefix
 
   def getDataFile(shuffleId: Int, mapId: Int): Path = {
-    new Path(s"${prefix}_${shuffleId}_${mapId}")
+    new Path(s"${prefix}_${shuffleId}_${mapId}.data")
   }
 
   def getIndexFile(shuffleId: Int, mapId: Int): Path = {
-    new Path(s"${prefix}_${shuffleId}_${mapId}_index")
+    new Path(s"${prefix}_${shuffleId}_${mapId}.index")
   }
 
   /**

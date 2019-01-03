@@ -111,6 +111,7 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       (p, v.toSet)
     }.toSet
     assert(results === expected)
+    sorter.stop()
   }
 
   private class SimpleRemoteBlockObjectReader[K, V](
@@ -160,7 +161,16 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
         sc.env.serializerManager, sc.env.serializer.newInstance()).read(testBlockId, path).toSet
     val expected = (0 until size).map { i => (i / 4, i)}.toSet
 
-    println(results.toSet.toString())
     assert(results === expected)
+
+    cleanFiles(path)
+    sorter.stop()
+  }
+
+  private def cleanFiles(paths: Path*): Unit = {
+    paths.foreach { path =>
+      val fs = path.getFileSystem(new Configuration)
+      fs.delete(path, true)
+    }
   }
 }
