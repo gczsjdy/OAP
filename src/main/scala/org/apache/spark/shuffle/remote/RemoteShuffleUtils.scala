@@ -39,7 +39,7 @@ object RemoteShuffleUtils {
    * Something like [[org.apache.spark.util.Utils.tempFileWith()]], instead returning Path
    */
   def tempPathWith(path: Path): Path = {
-    new Path(path.getName + "." + UUID.randomUUID())
+    new Path(path.toString + "." + UUID.randomUUID())
   }
 
   def getPath(blockId: BlockId): Path = {

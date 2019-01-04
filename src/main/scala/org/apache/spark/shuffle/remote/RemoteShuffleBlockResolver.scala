@@ -98,8 +98,8 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
   private def checkIndexAndDataFile(index: Path, data: Path, blocks: Int): Array[Long] = {
     val fs = index.getFileSystem(new Configuration)
 
-    // the index file should have `block + 1` longs as offset.
-    if (fs.getFileStatus(index).getLen != (blocks + 1) * 8L) {
+    // the index file should exist(of course) and have `block + 1` longs as offset.
+    if (!fs.exists(index) || fs.getFileStatus(index).getLen != (blocks + 1) * 8L) {
       return null
     }
     val lengths = new Array[Long](blocks)
