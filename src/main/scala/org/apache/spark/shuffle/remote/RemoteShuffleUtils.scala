@@ -17,23 +17,29 @@
 
 package org.apache.spark.shuffle.remote
 
+import java.io.{IOException, InputStream}
+import java.nio.ByteBuffer
 import java.util.UUID
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.storage.{BlockId, TempShuffleBlockId}
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkContext, SparkEnv}
 
 object RemoteShuffleUtils {
 
   val env = SparkEnv.get
 
+  private val master = "localhost"
   private val applicationId =
     if (Utils.isTesting) "testing" else SparkContext.getActive.get.applicationId
-  def remotePathPrefix = s"hdfs://localhost:9001/shuffle/${applicationId}"
+  def remotePathPrefix = s"hdfs://$master:9001/shuffle/$applicationId"
 
   /**
    * Something like [[org.apache.spark.util.Utils.tempFileWith()]], instead returning Path
@@ -74,4 +80,42 @@ object RemoteShuffleUtils {
     new RemoteBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)
   }
+}
+
+class HadoopFileSegmentManagedBuffer(file: Path, offset: Long, length: Long) extends ManagedBuffer {
+
+  override def size(): Long = length
+
+  override def nioByteBuffer(): ByteBuffer = ???
+
+  override def createInputStream(): InputStream = {
+    val fs = file.getFileSystem(new Configuration)
+    var is: InputStream = null
+    var shouldClose = true
+
+    try {
+      is = fs.open(file)
+      ByteStreams.skipFully(is, offset)
+      val r = new LimitedInputStream(is, length)
+      shouldClose = false
+      r
+    } catch {
+      case e: IOException =>
+        var errorMessage = "Error in reading " + this
+        if (is != null) {
+          val size = fs.getFileStatus(file).getLen
+          errorMessage = "Error in reading " + this + " (actual file length " + size + ")"
+        }
+        throw new IOException(errorMessage, e)
+    } finally {
+      if (shouldClose)
+        JavaUtils.closeQuietly(is)
+    }
+  }
+
+  override def retain(): ManagedBuffer = this
+
+  override def release(): ManagedBuffer = this
+
+  override def convertToNetty(): AnyRef = ???
 }

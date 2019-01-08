@@ -139,8 +139,37 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer =
-    throw new NotImplementedError("No need this for remote shuffle")
+  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+    // The block is actually going to be a range of a single map output file for this map, so
+    // find out the consolidated file, then the offset within that from our index
+    val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
+
+    // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
+    // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
+    // (which may cause a reducer to be sent a different reducer's data). The explicit position
+    // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
+    // class of issue from re-occurring in the future which is why they are left here even though
+    // SPARK-22982 is fixed.
+    val fs = indexFile.getFileSystem(new Configuration)
+    val in = fs.open(indexFile)
+    in.seek(blockId.reduceId * 8L)
+    try {
+      val offset = in.readLong()
+      val nextOffset = in.readLong()
+      val actualPosition = in.getPos()
+      val expectedPosition = blockId.reduceId * 8L + 16
+      if (actualPosition != expectedPosition) {
+        throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
+            s"expected $expectedPosition but actual position was $actualPosition.")
+      }
+      new HadoopFileSegmentManagedBuffer(
+        getDataFile(blockId.shuffleId, blockId.mapId),
+        offset,
+        nextOffset - offset)
+    } finally {
+      in.close()
+    }
+  }
 
   /**
     * Remove data file and index file that contain the output data from one map.
