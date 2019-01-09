@@ -1,22 +1,28 @@
 package org.apache.spark.shuffle.remote
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfterEach
 
 class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEach {
 
+  var dataFile: Path = _
+  var indexFile: Path = _
+  var dataTmp: Path = _
+
   test("Commit shuffle files multiple times") {
 
+    val resolver = new RemoteShuffleBlockResolver
     val shuffleId = 1
     val mapId = 2
-
-    val resolver = new RemoteShuffleBlockResolver
-    val indexFile = resolver.getIndexFile(shuffleId, mapId)
-    val dataFile = resolver.getDataFile(shuffleId, mapId)
-    val dataTmp = RemoteShuffleUtils.tempPathWith(dataFile)
+    indexFile = resolver.getIndexFile(shuffleId, mapId)
+    dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
+
+    dataTmp = RemoteShuffleUtils.tempPathWith(dataFile)
 
     val lengths = Array[Long](10, 0, 20)
     val out = fs.create(dataTmp)
@@ -104,6 +110,60 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
       assert(indexIn2.readLong() === 7, "The index file should be updated")
     } {
       indexIn2.close()
+    }
+  }
+
+  test("get block data") {
+
+    val resolver = new RemoteShuffleBlockResolver
+    val shuffleId = 1
+    val mapId = 2
+    indexFile = resolver.getIndexFile(shuffleId, mapId)
+    dataFile = resolver.getDataFile(shuffleId, mapId)
+    val fs = dataFile.getFileSystem(new Configuration)
+
+    val partitionId = 3
+    val expected = Array[Byte](8, 7, 6, 5)
+    val shuffleBlockId = ShuffleBlockId(shuffleId, mapId, partitionId)
+
+    val lengths = Array[Long](3, 1, 2, 4)
+    dataTmp = RemoteShuffleUtils.tempPathWith(dataFile)
+    val out = fs.create(dataTmp)
+    Utils.tryWithSafeFinally {
+      out.write(Array[Byte](3, 6, 9))
+      out.write(Array[Byte](1))
+      out.write(Array[Byte](2, 4))
+      out.write(expected)
+    } {
+      out.close()
+    }
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+
+    val inputStream = resolver.getBlockData(shuffleBlockId).createInputStream()
+    val ans = new Array[Byte](4)
+
+    Utils.tryWithSafeFinally {
+      inputStream.read(ans)
+      assert(expected === ans)
+    } {
+      inputStream.close()
+    }
+  }
+
+  override def afterEach() {
+    if (dataFile != null) {
+      val fs = dataFile.getFileSystem(new Configuration)
+      fs.delete(dataFile, true)
+    }
+
+    if (indexFile != null) {
+      val fs = indexFile.getFileSystem(new Configuration)
+      fs.delete(indexFile, true)
+    }
+
+    if (dataTmp != null) {
+      val fs = dataTmp.getFileSystem(new Configuration)
+      fs.delete(dataTmp, true)
     }
   }
 
