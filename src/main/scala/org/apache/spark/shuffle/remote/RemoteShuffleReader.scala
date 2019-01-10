@@ -50,8 +50,7 @@ private[spark] class RemoteShuffleReader[K, C](
       handle.numMaps,
       startPartition,
       endPartition,
-      serializerManager.wrapStream,
-      SparkEnv.get.conf.getBoolean("spark.shuffle.detectCorrupt", true))
+      serializerManager.wrapStream)
 
     val serializerInstance = dep.serializer.newInstance()
 

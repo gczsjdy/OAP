@@ -13,11 +13,13 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
   var indexFile: Path = _
   var dataTmp: Path = _
 
+  val shuffleId = 1
+  val mapId = 2
+
   test("Commit shuffle files multiple times") {
 
     val resolver = new RemoteShuffleBlockResolver
-    val shuffleId = 1
-    val mapId = 2
+
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
@@ -116,8 +118,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
   test("get block data") {
 
     val resolver = new RemoteShuffleBlockResolver
-    val shuffleId = 1
-    val mapId = 2
+
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
@@ -137,17 +138,39 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     } {
       out.close()
     }
+    // Actually this UT relies on this function's working fine
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
-    val inputStream = resolver.getBlockData(shuffleBlockId).createInputStream()
-    val ans = new Array[Byte](4)
+    val answerBuffer =
+      resolver.getBlockData(shuffleBlockId).asInstanceOf[HadoopFileSegmentManagedBuffer]
+    val expectedBuffer = new HadoopFileSegmentManagedBuffer(dataFile, 6, 4)
+    assert(expectedBuffer.equals(answerBuffer))
+  }
 
+  test("createInputStream of HadoopFileSegmentManagedBuffer") {
+
+    val resolver = new RemoteShuffleBlockResolver
+
+    dataFile = resolver.getDataFile(shuffleId, mapId)
+    val fs = dataFile.getFileSystem(new Configuration)
+
+    val out = fs.create(dataFile)
+    val expected = Array[Byte](2, 4)
     Utils.tryWithSafeFinally {
-      inputStream.read(ans)
-      assert(expected === ans)
+      out.write(Array[Byte](3, 6, 9))
+      out.write(Array[Byte](1))
+      out.write(expected)
+      out.write(Array[Byte](8, 7, 6, 5))
     } {
-      inputStream.close()
+      out.close()
     }
+
+    val answer = new Array[Byte](2)
+    val buf = new HadoopFileSegmentManagedBuffer(dataFile, 4, 2)
+    val inputStream= buf.createInputStream()
+    inputStream.read(answer)
+    assert(expected === answer)
+    assert(inputStream.available() == 0)
   }
 
   override def afterEach() {

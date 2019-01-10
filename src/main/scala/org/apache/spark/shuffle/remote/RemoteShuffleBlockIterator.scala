@@ -41,7 +41,6 @@ import scala.collection.mutable
   *
   * @param context [[TaskContext]], used for metrics update
   * @param streamWrapper A function to wrap the returned input stream.
-  * @param detectCorrupt whether to detect any corruption in fetched blocks.
   */
 private[spark]
 final class RemoteShuffleBlockIterator(
@@ -51,8 +50,7 @@ final class RemoteShuffleBlockIterator(
     numMappers: Int,
     startPartition: Int,
     endPartition: Int,
-    streamWrapper: (BlockId, InputStream) => InputStream,
-    detectCorrupt: Boolean)
+    streamWrapper: (BlockId, InputStream) => InputStream)
     extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
 
   private[this] val startTime = System.currentTimeMillis

@@ -1,11 +1,14 @@
 package org.apache.spark.shuffle.remote
 
 import java.io._
+import java.nio.ByteBuffer
 
+import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 import org.apache.spark.shuffle.ShuffleBlockResolver
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
@@ -192,4 +195,54 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
   }
 
   override def stop(): Unit = {}
+}
+
+private[remote] class HadoopFileSegmentManagedBuffer(
+    private val file: Path, private val offset: Long, private val length: Long)
+    extends ManagedBuffer {
+
+  override def size(): Long = length
+
+  override def nioByteBuffer(): ByteBuffer = ???
+
+  override def createInputStream(): InputStream = {
+    val fs = file.getFileSystem(new Configuration)
+    var is: InputStream = null
+    var shouldClose = true
+
+    try {
+      is = fs.open(file)
+      ByteStreams.skipFully(is, offset)
+      val r = new LimitedInputStream(is, length)
+      shouldClose = false
+      r
+    } catch {
+      case e: IOException =>
+        var errorMessage = "Error in reading " + this
+        if (is != null) {
+          val size = fs.getFileStatus(file).getLen
+          errorMessage = "Error in reading " + this + " (actual file length " + size + ")"
+        }
+        throw new IOException(errorMessage, e)
+    } finally {
+      if (shouldClose)
+        JavaUtils.closeQuietly(is)
+    }
+
+  }
+
+  override def equals(obj: Any): Boolean = {
+    if (! obj.isInstanceOf[HadoopFileSegmentManagedBuffer]) {
+      false
+    } else {
+      val buffer = obj.asInstanceOf[HadoopFileSegmentManagedBuffer]
+      this.file == buffer.file && this.offset == buffer.offset && this.length == buffer.length
+    }
+  }
+
+  override def retain(): ManagedBuffer = this
+
+  override def release(): ManagedBuffer = this
+
+  override def convertToNetty(): AnyRef = ???
 }
