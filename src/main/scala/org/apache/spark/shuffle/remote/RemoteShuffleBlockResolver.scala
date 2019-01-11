@@ -135,7 +135,7 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
     }
 
     // the size of data file should match with index file
-    if (fs.getFileStatus(data).getLen == lengths.sum) {
+    if (fs.exists(data) && fs.getFileStatus(data).getLen == lengths.sum) {
       lengths
     } else {
       null
