@@ -154,7 +154,7 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
     val testBlockId = TestBlockId("hi")
     val path = new Path(
-      s"${RemoteShuffleUtils.remotePathPrefix}/UnitTest/RemoteExternalSorterSuite/1")
+      s"${RemoteShuffleUtils.directoryPrefix}/UnitTest/RemoteExternalSorterSuite/1")
     sorter.writePartitionedFile(testBlockId, path)
     val results =
       new SimpleRemoteBlockObjectReader[Int, Int](

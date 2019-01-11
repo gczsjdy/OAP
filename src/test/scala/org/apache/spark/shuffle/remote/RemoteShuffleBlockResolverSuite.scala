@@ -138,7 +138,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     } {
       out.close()
     }
-    // Actually this UT relies on this function's working fine
+    // Actually this UT relies on this outside function's fine working
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
     val answerBuffer =
@@ -173,20 +173,27 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     assert(inputStream.available() == 0)
   }
 
+  private def deleteFileAndTempWithPrefix(prefixPath: Path): Unit = {
+    val fs = prefixPath.getFileSystem(new Configuration)
+    val parentDir = prefixPath.getParent
+    val iter = fs.listFiles(parentDir, false)
+    while (iter.hasNext) {
+      val file = iter.next()
+      if (file.getPath.toString.contains(prefixPath.getName)) {
+        fs.delete(file.getPath, true)
+      }
+    }
+  }
+
   override def afterEach() {
     if (dataFile != null) {
-      val fs = dataFile.getFileSystem(new Configuration)
-      fs.delete(dataFile, true)
+      // Also delete tmp files if needed
+      deleteFileAndTempWithPrefix(dataFile)
     }
 
     if (indexFile != null) {
-      val fs = indexFile.getFileSystem(new Configuration)
-      fs.delete(indexFile, true)
-    }
-
-    if (dataTmp != null) {
-      val fs = dataTmp.getFileSystem(new Configuration)
-      fs.delete(dataTmp, true)
+      // Also delete tmp files if needed
+      deleteFileAndTempWithPrefix(indexFile)
     }
   }
 

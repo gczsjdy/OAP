@@ -15,14 +15,14 @@ import org.apache.spark.util.Utils
 
 class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
 
-  private val prefix = RemoteShuffleUtils.remotePathPrefix
+  private val prefix = RemoteShuffleUtils.directoryPrefix
 
   def getDataFile(shuffleId: Int, mapId: Int): Path = {
-    new Path(s"${prefix}_${shuffleId}_${mapId}.data")
+    new Path(s"${prefix}/${shuffleId}_${mapId}.data")
   }
 
   def getIndexFile(shuffleId: Int, mapId: Int): Path = {
-    new Path(s"${prefix}_${shuffleId}_${mapId}.index")
+    new Path(s"${prefix}/${shuffleId}_${mapId}.index")
   }
 
   /**

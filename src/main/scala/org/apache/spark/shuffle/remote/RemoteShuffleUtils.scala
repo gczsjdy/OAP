@@ -31,10 +31,10 @@ object RemoteShuffleUtils {
 
   val env = SparkEnv.get
 
-  private val master = "localhost"
+  private val master = "localhost:9001"
   private val applicationId =
     if (Utils.isTesting) "testing" else SparkContext.getActive.get.applicationId
-  def remotePathPrefix = s"hdfs://$master:9001/shuffle/$applicationId"
+  def directoryPrefix = s"hdfs://$master/shuffle/$applicationId"
 
   /**
    * Something like [[org.apache.spark.util.Utils.tempFileWith()]], instead returning Path
@@ -44,7 +44,7 @@ object RemoteShuffleUtils {
   }
 
   def getPath(blockId: BlockId): Path = {
-    new Path(s"${remotePathPrefix}/${blockId.name}")
+    new Path(s"${directoryPrefix}/${blockId.name}")
   }
 
   /**
