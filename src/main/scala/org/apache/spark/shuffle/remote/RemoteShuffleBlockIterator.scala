@@ -21,7 +21,6 @@ import java.io.{IOException, InputStream}
 
 import javax.annotation.concurrent.GuardedBy
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.FileSegmentManagedBuffer
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver
@@ -61,8 +60,6 @@ final class RemoteShuffleBlockIterator(
     */
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
 
-  private[this] val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
-
   private val insideIter = {
     for (mapId <- 0 until numMappers; reduceId <- startPartition until endPartition) yield {
       // Note: Can be optimized by reading consecutive blocks
@@ -74,7 +71,6 @@ final class RemoteShuffleBlockIterator(
       } catch {
         // The exception could only be throwed by local shuffle block
         case e: IOException =>
-          assert(buf.isInstanceOf[FileSegmentManagedBuffer])
           logError("Failed to create input stream from local block", e)
           buf.release()
           throwCurrentlySimpleMayChangeException(blockId, e)
