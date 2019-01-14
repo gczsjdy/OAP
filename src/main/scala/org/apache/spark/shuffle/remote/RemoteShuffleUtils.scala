@@ -32,8 +32,8 @@ object RemoteShuffleUtils {
   val env = SparkEnv.get
 
   private val master = "localhost:9001"
-  private val applicationId =
-    if (Utils.isTesting) "testing" else SparkContext.getActive.get.applicationId
+  private lazy val applicationId =
+    if (Utils.isTesting) s"test${UUID.randomUUID()}" else SparkContext.getActive.get.applicationId
   def directoryPrefix = s"hdfs://$master/shuffle/$applicationId"
 
   /**

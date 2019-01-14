@@ -30,7 +30,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths.toArray, dataTmp)
   }
 
-  test("Basic read ") {
+  test("Basic read") {
 
     val shuffleId = 1
 
