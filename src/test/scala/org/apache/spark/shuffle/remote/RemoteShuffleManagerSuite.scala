@@ -7,10 +7,20 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   test("repartition") {
     val conf = new SparkConf(true)
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-    sc = new SparkContext("local", "test", conf)
+    sc = new SparkContext("local", "test_repartition", conf)
     val data = 1 until 20
     val rdd = sc.parallelize(data, 10)
     val newRdd = rdd.repartition(20)
+    assert(newRdd.collect().sorted === data)
+  }
+
+  test("repartition with some map output empty") {
+    val conf = new SparkConf(true)
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+    sc = new SparkContext("local", "test_repartition_empty", conf)
+    val data = 1 until 20
+    val rdd = sc.parallelize(data, 30)
+    val newRdd = rdd.repartition(40)
     assert(newRdd.collect().sorted === data)
   }
 

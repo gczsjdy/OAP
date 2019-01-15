@@ -206,27 +206,32 @@ private[remote] class HadoopFileSegmentManagedBuffer(
   override def nioByteBuffer(): ByteBuffer = ???
 
   override def createInputStream(): InputStream = {
-    val fs = file.getFileSystem(new Configuration)
-    var is: InputStream = null
-    var shouldClose = true
 
-    try {
-      is = fs.open(file)
-      ByteStreams.skipFully(is, offset)
-      val r = new LimitedInputStream(is, length)
-      shouldClose = false
-      r
-    } catch {
-      case e: IOException =>
-        var errorMessage = "Error in reading " + this
-        if (is != null) {
-          val size = fs.getFileStatus(file).getLen
-          errorMessage = "Error in reading " + this + " (actual file length " + size + ")"
-        }
-        throw new IOException(errorMessage, e)
-    } finally {
-      if (shouldClose)
-        JavaUtils.closeQuietly(is)
+    if (length == 0) {
+      new ByteArrayInputStream(new Array[Byte](0))
+    } else {
+      val fs = file.getFileSystem(new Configuration)
+      var is: InputStream = null
+      var shouldClose = true
+
+      try {
+        is = fs.open(file)
+        ByteStreams.skipFully(is, offset)
+        val r = new LimitedInputStream(is, length)
+        shouldClose = false
+        r
+      } catch {
+        case e: IOException =>
+          var errorMessage = "Error in reading " + this
+          if (is != null) {
+            val size = fs.getFileStatus(file).getLen
+            errorMessage = "Error in reading " + this + " (actual file length " + size + ")"
+          }
+          throw new IOException(errorMessage, e)
+      } finally {
+        if (shouldClose)
+          JavaUtils.closeQuietly(is)
+      }
     }
 
   }

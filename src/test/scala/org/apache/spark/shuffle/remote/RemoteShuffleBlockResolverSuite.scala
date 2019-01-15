@@ -173,14 +173,32 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     assert(inputStream.available() == 0)
   }
 
+  test("createInputStream of HadoopFileSegmentManagedBuffer, with no data") {
+
+    val resolver = new RemoteShuffleBlockResolver
+
+    dataFile = resolver.getDataFile(shuffleId, mapId)
+    val fs = dataFile.getFileSystem(new Configuration)
+
+    val answer = new Array[Byte](0)
+    val expected = new Array[Byte](0)
+    val buf = new HadoopFileSegmentManagedBuffer(dataFile, 4, 0)
+    val inputStream= buf.createInputStream()
+    inputStream.read(answer)
+    assert(expected === answer)
+    assert(inputStream.available() == 0)
+  }
+
   private def deleteFileAndTempWithPrefix(prefixPath: Path): Unit = {
     val fs = prefixPath.getFileSystem(new Configuration)
     val parentDir = prefixPath.getParent
-    val iter = fs.listFiles(parentDir, false)
-    while (iter.hasNext) {
-      val file = iter.next()
-      if (file.getPath.toString.contains(prefixPath.getName)) {
-        fs.delete(file.getPath, true)
+    if (fs.exists(parentDir)) {
+      val iter = fs.listFiles(parentDir, false)
+      while (iter.hasNext) {
+        val file = iter.next()
+        if (file.getPath.toString.contains(prefixPath.getName)) {
+          fs.delete(file.getPath, true)
+        }
       }
     }
   }

@@ -30,6 +30,8 @@ import org.apache.spark.shuffle.sort.SerializedShuffleHandle
   */
 private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
 
+  logWarning("******** Remote Shuffle Manager is used ********")
+
   if (!conf.getBoolean("spark.shuffle.spill", true)) {
     logWarning(
       "spark.shuffle.spill was set to false, but this configuration is ignored as of Spark 1.6+." +
