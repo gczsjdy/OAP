@@ -22,7 +22,8 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
-import org.apache.spark.shuffle.sort.SerializedShuffleHandle
+import org.apache.spark.shuffle.sort.{RemoteUnsafeShuffleWriter, SerializedShuffleHandle}
+import org.apache.spark.shuffle.sort.SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE
 
 /**
   * In remote shuffle, data is written to a remote Hadoop compatible file system instead of local
@@ -88,7 +89,9 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
-        throw new NotImplementedError("Coming soon~")
+        new RemoteUnsafeShuffleWriter(
+          env.blockManager, shuffleBlockResolver, context.taskMemoryManager(), unsafeShuffleHandle,
+          mapId, context, env.conf)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new RemoteShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }
@@ -113,13 +116,32 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
 
 private[spark] object RemoteShuffleManager extends Logging {
 
-  val useSimpleShuffleWriterThisTime = true
 
+  var useOptimizedShuffleWriterThisTime = false
   /**
     * Helper method for determining whether a shuffle should use an optimized serialized shuffle
     * path or whether it should fall back to the original path that operates on deserialized objects.
     */
   def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _]): Boolean = {
-    !useSimpleShuffleWriterThisTime
+    useOptimizedShuffleWriterThisTime && {
+      val shufId = dependency.shuffleId
+      val numPartitions = dependency.partitioner.numPartitions
+      if (!dependency.serializer.supportsRelocationOfSerializedObjects) {
+        log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
+            s"${dependency.serializer.getClass.getName}, does not support object relocation")
+        false
+      } else if (dependency.mapSideCombine) {
+        log.debug(s"Can't use serialized shuffle for shuffle $shufId because we need to do " +
+            s"map-side aggregation")
+        false
+      } else if (numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE) {
+        log.debug(s"Can't use serialized shuffle for shuffle $shufId because it has more than " +
+            s"$MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE partitions")
+        false
+      } else {
+        log.debug(s"Can use serialized shuffle for shuffle $shufId")
+        true
+      }
+    }
   }
 }

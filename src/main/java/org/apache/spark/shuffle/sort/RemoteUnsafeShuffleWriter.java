@@ -22,6 +22,12 @@ import java.io.*;
 import java.nio.channels.FileChannel;
 import java.util.Iterator;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver;
+import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
 import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import org.apache.spark.shuffle.sort.SortShuffleManager;
 import scala.Option;
@@ -65,6 +71,10 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private static final Logger logger =
       LoggerFactory.getLogger(RemoteUnsafeShuffleWriter.class);
 
+  static {
+    logger.warn("******** Optimized Remote Shuffle Writer is used ********");
+  }
+
   private static final ClassTag<Object> OBJECT_CLASS_TAG = ClassTag$.MODULE$.Object();
 
   @VisibleForTesting
@@ -72,7 +82,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   static final int DEFAULT_INITIAL_SER_BUFFER_SIZE = 1024 * 1024;
 
   private final BlockManager blockManager;
-  private final IndexShuffleBlockResolver shuffleBlockResolver;
+  private final RemoteShuffleBlockResolver shuffleBlockResolver;
   private final TaskMemoryManager memoryManager;
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
@@ -120,7 +130,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   public RemoteUnsafeShuffleWriter(
       BlockManager blockManager,
-      IndexShuffleBlockResolver shuffleBlockResolver,
+      RemoteShuffleBlockResolver shuffleBlockResolver,
       TaskMemoryManager memoryManager,
       SerializedShuffleHandle<K, V> handle,
       int mapId,
@@ -233,22 +243,24 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final SpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
-    final File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
-    final File tmp = Utils.tempFileWith(output);
+    final Path output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+    final Path tmp = RemoteShuffleUtils.tempPathWith(output);
+    FileSystem fs = output.getFileSystem(new Configuration());
     try {
       try {
         partitionLengths = mergeSpills(spills, tmp);
       } finally {
+
         for (SpillInfo spill : spills) {
-          if (spill.file.exists() && ! spill.file.delete()) {
-            logger.error("Error while deleting spill file {}", spill.file.getPath());
+          if (fs.exists(spill.file) && ! fs.delete(spill.file, true)) {
+            logger.error("Error while deleting spill file {}", spill.file.toString());
           }
         }
       }
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
     } finally {
-      if (tmp.exists() && !tmp.delete()) {
-        logger.error("Error while deleting temp file {}", tmp.getAbsolutePath());
+      if (fs.exists(tmp) && !fs.delete(tmp, true)) {
+        logger.error("Error while deleting temp file {}", tmp.toString());
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
@@ -283,7 +295,8 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpills(SpillInfo[] spills, File outputFile) throws IOException {
+  private long[] mergeSpills(SpillInfo[] spills, Path outputFile) throws IOException {
+    final FileSystem fs = outputFile.getFileSystem(new Configuration());
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -293,12 +306,12 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final boolean encryptionEnabled = blockManager.serializerManager().encryptionEnabled();
     try {
       if (spills.length == 0) {
-        new FileOutputStream(outputFile).close(); // Create an empty file
+        fs.create(outputFile).close(); // Create an empty file
         return new long[partitioner.numPartitions()];
       } else if (spills.length == 1) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
         // output file would have already been counted as shuffle bytes written.
-        Files.move(spills[0].file, outputFile);
+        fs.rename(spills[0].file, outputFile);
         return spills[0].partitionLengths;
       } else {
         final long[] partitionLengths;
@@ -332,13 +345,13 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // final write as bytes spilled (instead, it's accounted as shuffle write). The merge needs
         // to be counted as shuffle write, but this will lead to double-counting of the final
         // SpillInfo's bytes.
-        writeMetrics.decBytesWritten(spills[spills.length - 1].file.length());
-        writeMetrics.incBytesWritten(outputFile.length());
+        writeMetrics.decBytesWritten(fs.getFileStatus(spills[spills.length - 1].file).getLen());
+        writeMetrics.incBytesWritten(fs.getFileStatus(outputFile).getLen());
         return partitionLengths;
       }
     } catch (IOException e) {
-      if (outputFile.exists() && !outputFile.delete()) {
-        logger.error("Unable to delete output file {}", outputFile.getPath());
+      if (fs.exists(outputFile) && !fs.delete(outputFile, true)) {
+        logger.error("Unable to delete output file {}", outputFile.toString());
       }
       throw e;
     }
@@ -347,7 +360,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   /**
    * Merges spill files using Java FileStreams. This code path is typically slower than
    * the NIO-based merge, {@link RemoteUnsafeShuffleWriter#mergeSpillsWithTransferTo(SpillInfo[],
-   * File)}, and it's mostly used in cases where the IO compression codec does not support
+   * Path)}, and it's mostly used in cases where the IO compression codec does not support
    * concatenation of compressed data, when encryption is enabled, or when users have
    * explicitly disabled use of {@code transferTo} in order to work around kernel bugs.
    * This code path might also be faster in cases where individual partition size in a spill
@@ -362,15 +375,16 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   private long[] mergeSpillsWithFileStream(
       SpillInfo[] spills,
-      File outputFile,
+      Path outputFile,
       @Nullable CompressionCodec compressionCodec) throws IOException {
     assert (spills.length >= 2);
+    final FileSystem fs = spills[0].file.getFileSystem(new Configuration());
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final InputStream[] spillInputStreams = new InputStream[spills.length];
 
     final OutputStream bos = new BufferedOutputStream(
-        new FileOutputStream(outputFile),
+        fs.create(outputFile),
         outputBufferSizeInBytes);
     // Use a counting output stream to avoid having to close the underlying file and ask
     // the file system for its size after each partition is written.
@@ -379,8 +393,9 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
-        spillInputStreams[i] = new NioBufferedFileInputStream(
-            spills[i].file,
+        // Note by Chenzhao: Originally NioBufferedFileInputStream is used
+        spillInputStreams[i] = new BufferedInputStream(
+            fs.open(spills[i].file),
             inputBufferSizeInBytes);
       }
       for (int partition = 0; partition < numPartitions; partition++) {
@@ -434,34 +449,36 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpillsWithTransferTo(SpillInfo[] spills, File outputFile) throws IOException {
+  private long[] mergeSpillsWithTransferTo(SpillInfo[] spills, Path outputFile) throws IOException {
     assert (spills.length >= 2);
+    final FileSystem fs = spills[0].file.getFileSystem(new Configuration());
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
-    final FileChannel[] spillInputChannels = new FileChannel[spills.length];
+    final InputStream[] spillInputStreams = new InputStream[spills.length];
     final long[] spillInputChannelPositions = new long[spills.length];
-    FileChannel mergedFileOutputChannel = null;
+    OutputStream mergedFileOutputStream = null;
 
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
-        spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
+        //Note by Chenzhao: Need to revisit all the fs.open buffer size? Default is 4k
+        spillInputStreams[i] = fs.open(spills[i].file);
       }
       // This file needs to opened in append mode in order to work around a Linux kernel bug that
       // affects transferTo; see SPARK-3948 for more details.
-      mergedFileOutputChannel = new FileOutputStream(outputFile, true).getChannel();
+      mergedFileOutputStream = fs.create(outputFile);
 
       long bytesWrittenToMergedFile = 0;
       for (int partition = 0; partition < numPartitions; partition++) {
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
-          final FileChannel spillInputChannel = spillInputChannels[i];
           final long writeStartTime = System.nanoTime();
-          Utils.copyFileStreamNIO(
-              spillInputChannel,
-              mergedFileOutputChannel,
-              spillInputChannelPositions[i],
-              partitionLengthInSpill);
+          //Note by Chenzhao: Underlying buffer size inside this function call is 4k
+          Utils.copyStream(
+              spillInputStreams[i],
+              mergedFileOutputStream,
+              true,
+              true);
           spillInputChannelPositions[i] += partitionLengthInSpill;
           writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
           bytesWrittenToMergedFile += partitionLengthInSpill;
@@ -472,10 +489,12 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // exception if it is incorrect. The position will not be increased to the expected length
       // after calling transferTo in kernel version 2.6.32. This issue is described at
       // https://bugs.openjdk.java.net/browse/JDK-7052359 and SPARK-3948.
-      if (mergedFileOutputChannel.position() != bytesWrittenToMergedFile) {
+      if (((FSDataOutputStream) mergedFileOutputStream).getPos() != bytesWrittenToMergedFile) {
         throw new IOException(
-            "Current position " + mergedFileOutputChannel.position() + " does not equal expected " +
-                "position " + bytesWrittenToMergedFile + " after transferTo. Please check your kernel" +
+            "Current position " + ((FSDataOutputStream) mergedFileOutputStream).getPos() +
+                " does not equal expected " +
+                "position " + bytesWrittenToMergedFile +
+                " after transferTo. Please check your kernel" +
                 " version to see if it is 2.6.32, as there is a kernel bug which will lead to " +
                 "unexpected behavior when using transferTo. You can set spark.file.transferTo=false " +
                 "to disable this NIO feature."
@@ -486,10 +505,10 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // To avoid masking exceptions that caused us to prematurely enter the finally block, only
       // throw exceptions during cleanup if threwException == false.
       for (int i = 0; i < spills.length; i++) {
-        assert(spillInputChannelPositions[i] == spills[i].file.length());
-        Closeables.close(spillInputChannels[i], threwException);
+        assert(spillInputChannelPositions[i] == fs.getFileStatus(spills[i].file).getLen());
+        Closeables.close(spillInputStreams[i], threwException);
       }
-      Closeables.close(mergedFileOutputChannel, threwException);
+      Closeables.close(mergedFileOutputStream, threwException);
     }
     return partitionLengths;
   }
@@ -516,7 +535,11 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       if (sorter != null) {
         // If sorter is non-null, then this implies that we called stop() in response to an error,
         // so we need to clean up memory and spill files created by the sorter
-        sorter.cleanupResources();
+        try {
+          sorter.cleanupResources();
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
       }
     }
   }

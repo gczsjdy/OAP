@@ -32,6 +32,8 @@ private[spark] class RemoteShuffleWriter[K, V, C](
     context: TaskContext)
     extends ShuffleWriter[K, V] with Logging {
 
+  logWarning("******** General Remote Shuffle Writer is used ********")
+
   private val blockManager = SparkEnv.get.blockManager
 
   private val dep = handle.dependency

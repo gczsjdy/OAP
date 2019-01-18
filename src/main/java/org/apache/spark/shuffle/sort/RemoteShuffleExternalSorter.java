@@ -18,10 +18,17 @@
 package org.apache.spark.shuffle.sort;
 
 import javax.annotation.Nullable;
-import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.spark.SparkEnv;
+import org.apache.spark.serializer.SerializerManager;
+import org.apache.spark.shuffle.remote.HadoopFileSegment;
+import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter;
+import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -39,8 +46,7 @@ import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.storage.DiskBlockObjectWriter;
-import org.apache.spark.storage.FileSegment;
+import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
@@ -66,6 +72,8 @@ import org.apache.spark.util.Utils;
  */
 final class RemoteShuffleExternalSorter extends MemoryConsumer {
 
+  private SerializerManager serializerManager = SparkEnv.get().serializerManager();
+
   private static final Logger logger = LoggerFactory.getLogger(RemoteShuffleExternalSorter.class);
 
   @VisibleForTesting
@@ -82,7 +90,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
    */
   private final int numElementsForSpillThreshold;
 
-  /** The buffer size to use when writing spills using DiskBlockObjectWriter */
+  /** The buffer size to use when writing spills using RemoteBlockObjectWriter */
   private final int fileBufferSizeBytes;
 
   /** The buffer size to use when writing the sorted records to an on-disk file */
@@ -160,7 +168,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
         inMemSorter.getSortedIterator();
 
-    // Small writes to DiskBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
+    // Small writes to RemoteBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
     // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
     // data through a byte array. This array does not need to be large enough to hold a single
     // record;
@@ -169,20 +177,21 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     // Because this output will be read during shuffle, its compression codec must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more details.
-    final Tuple2<TempShuffleBlockId, File> spilledFileInfo =
-        blockManager.diskBlockManager().createTempShuffleBlock();
-    final File file = spilledFileInfo._2();
+    final Tuple2<TempShuffleBlockId, Path> spilledFileInfo =
+        RemoteShuffleUtils.createTempShuffleBlock();
+    final Path file = spilledFileInfo._2();
     final TempShuffleBlockId blockId = spilledFileInfo._1();
     final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
 
-    // Unfortunately, we need a serializer instance in order to construct a DiskBlockObjectWriter.
+    // Unfortunately, we need a serializer instance in order to construct a RemoteBlockObjectWriter.
     // Our write path doesn't actually use this serializer (since we end up calling the `write()`
-    // OutputStream methods), but DiskBlockObjectWriter still calls some methods on it. To work
+    // OutputStream methods), but RemoteBlockObjectWriter still calls some methods on it. To work
     // around this, we pass a dummy no-op serializer.
     final SerializerInstance ser = DummySerializerInstance.INSTANCE;
 
-    final DiskBlockObjectWriter writer =
-        blockManager.getDiskWriter(blockId, file, ser, fileBufferSizeBytes, writeMetricsToUse);
+    final RemoteBlockObjectWriter writer =
+        RemoteShuffleUtils.getRemoteWriter(
+            blockId, file, serializerManager, ser, fileBufferSizeBytes, writeMetricsToUse);
 
     int currentPartition = -1;
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
@@ -193,7 +202,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
       if (partition != currentPartition) {
         // Switch to the new partition
         if (currentPartition != -1) {
-          final FileSegment fileSegment = writer.commitAndGet();
+          final HadoopFileSegment fileSegment = writer.commitAndGet();
           spillInfo.partitionLengths[currentPartition] = fileSegment.length();
         }
         currentPartition = partition;
@@ -215,7 +224,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
       writer.recordWritten();
     }
 
-    final FileSegment committedSegment = writer.commitAndGet();
+    final HadoopFileSegment committedSegment = writer.commitAndGet();
     writer.close();
     // If `writeSortedFile()` was called from `closeAndGetSpills()` and no records were inserted,
     // then the file might be empty. Note that it might be better to avoid calling
@@ -227,13 +236,13 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
 
     if (!isLastFile) {  // i.e. this is a spill file
       // The current semantics of `shuffleRecordsWritten` seem to be that it's updated when records
-      // are written to disk, not when they enter the shuffle sorting code. DiskBlockObjectWriter
+      // are written to disk, not when they enter the shuffle sorting code. RemoteBlockObjectWriter
       // relies on its `recordWritten()` method being called in order to trigger periodic updates to
       // `shuffleBytesWritten`. If we were to remove the `recordWritten()` call and increment that
       // counter at a higher-level, then the in-progress metrics for records written and bytes
       // written would get out of sync.
       //
-      // When writing the last file, we pass `writeMetrics` directly to the DiskBlockObjectWriter;
+      // When writing the last file, we pass `writeMetrics` directly to the RemoteBlockObjectWriter;
       // in all other cases, we pass in a dummy write metrics to capture metrics, then copy those
       // metrics to the true write metrics here. The reason for performing this copying is so that
       // we can avoid reporting spilled bytes as shuffle write bytes.
@@ -310,15 +319,19 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
   /**
    * Force all memory and spill files to be deleted; called by shuffle error-handling code.
    */
-  public void cleanupResources() {
+  public void cleanupResources() throws IOException {
     freeMemory();
     if (inMemSorter != null) {
       inMemSorter.free();
       inMemSorter = null;
     }
+    FileSystem fs = null;
+    if (!spills.isEmpty()) {
+      fs = spills.get(0).file.getFileSystem(new Configuration());
+    }
     for (SpillInfo spill : spills) {
-      if (spill.file.exists() && !spill.file.delete()) {
-        logger.error("Unable to delete spill file {}", spill.file.getPath());
+      if (fs.exists(spill.file) && !fs.delete(spill.file, true)) {
+        logger.error("Unable to delete spill file {}", spill.file.toString());
       }
     }
   }

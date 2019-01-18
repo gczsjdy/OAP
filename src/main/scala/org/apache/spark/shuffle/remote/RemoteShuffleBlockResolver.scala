@@ -13,6 +13,9 @@ import org.apache.spark.shuffle.ShuffleBlockResolver
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
 
+/**
+  * Note by Chenzhao: optimization of index file cache
+  */
 class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
 
   private lazy val prefix = RemoteShuffleUtils.directoryPrefix
@@ -108,7 +111,7 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
     val lengths = new Array[Long](blocks)
     // Read the lengths of blocks
     val in = try {
-      // By Chenzhao: originally [[NioBufferedFileInputStream]] is used
+      // Note by Chenzhao: originally [[NioBufferedFileInputStream]] is used
       new DataInputStream(new BufferedInputStream(fs.open(index)))
     } catch {
       case e: IOException =>

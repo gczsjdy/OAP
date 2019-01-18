@@ -68,6 +68,11 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     test(name + " with kryo ser") {
       body(createSparkConf(loadDefaults, kryo = true))
     }
+    /**
+      * Note by Chenzhao: Need to revisit this, lack of append argument in HDFS API induces writing
+      * a header every time for Java serializer. The current way of commitAndGet may need to be
+      * modified
+      */
     test(name + " with java ser") {
       body(createSparkConf(loadDefaults, kryo = false))
     }

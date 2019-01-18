@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.shuffle.remote
 
 import java.io.{IOException, InputStream}
 
@@ -23,7 +23,7 @@ import javax.annotation.concurrent.GuardedBy
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
-import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver
+import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.{SparkException, TaskContext}
 
 import scala.collection.mutable
@@ -62,7 +62,7 @@ final class RemoteShuffleBlockIterator(
 
   private val insideIter = {
     for (mapId <- 0 until numMappers; reduceId <- startPartition until endPartition) yield {
-      // Note: Can be optimized by reading consecutive blocks
+      // Note by Chenzhao: Can be optimized by reading consecutive blocks
       val blockId = ShuffleBlockId(shuffleId, mapId, reduceId)
       val buf = resolver.getBlockData(blockId)
 

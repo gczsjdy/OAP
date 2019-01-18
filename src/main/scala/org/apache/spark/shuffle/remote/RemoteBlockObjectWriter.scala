@@ -189,7 +189,7 @@ private[spark] class RemoteBlockObjectWriter(
       objOut.close()
       streamOpen = false
 
-      /* Leave this first */
+      /* NOTE by Chenzhao: Leave this first */
 //      if (syncWrites) {
 //        // Force outstanding writes to disk and track how long it takes
 //        val start = System.nanoTime()
@@ -212,7 +212,8 @@ private[spark] class RemoteBlockObjectWriter(
 
 
   /**
-    * NOTE: No revert currently(when exception occurs), due to the lack of HDFS truncate API
+    * NOTE by Chenzhao: No revert currently(when exception occurs), due to the lack of HDFS truncate
+    * API
     *
     * Reverts writes that haven't been committed yet. Callers should invoke this function
     * when there are runtime exceptions. This method will not throw, though it may be
