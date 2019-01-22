@@ -28,12 +28,10 @@ import org.apache.spark.storage.TestBlockId
 class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   testWithMultipleSer("no sorting or partial aggregation with spilling") { (conf: SparkConf) =>
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
     basicSorterTest(conf, withPartialAgg = false, withOrdering = false, withSpilling = true)
   }
 
   testWithMultipleSer("basic sorter write") { (conf: SparkConf) =>
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
     basicSorterWrite(conf, withPartialAgg = false, withOrdering = false, withSpilling = true)
   }
 
@@ -43,7 +41,6 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   private def createSparkConf(loadDefaults: Boolean, kryo: Boolean): SparkConf = {
     val conf = new SparkConf(loadDefaults)
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
     if (kryo) {
       conf.set("spark.serializer", classOf[KryoSerializer].getName)
     } else {

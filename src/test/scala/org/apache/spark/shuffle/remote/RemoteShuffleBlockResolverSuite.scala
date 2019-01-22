@@ -189,7 +189,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     assert(inputStream.available() == 0)
   }
 
-  private def deleteFileAndTempWithPrefix(prefixPath: Path): Unit = {
+  private def deleteFilesWithPrefix(prefixPath: Path): Unit = {
     val fs = prefixPath.getFileSystem(new Configuration)
     val parentDir = prefixPath.getParent
     if (fs.exists(parentDir)) {
@@ -206,12 +206,12 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
   override def afterEach() {
     if (dataFile != null) {
       // Also delete tmp files if needed
-      deleteFileAndTempWithPrefix(dataFile)
+      deleteFilesWithPrefix(dataFile)
     }
 
     if (indexFile != null) {
       // Also delete tmp files if needed
-      deleteFileAndTempWithPrefix(indexFile)
+      deleteFilesWithPrefix(indexFile)
     }
   }
 

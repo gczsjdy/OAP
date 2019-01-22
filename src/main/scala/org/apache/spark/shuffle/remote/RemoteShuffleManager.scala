@@ -53,7 +53,7 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (RemoteShuffleManager.canUseSerializedShuffle(dependency)) {
+    if (RemoteShuffleManager.canUseSerializedShuffle(dependency, conf)) {
       new SerializedShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else {
@@ -116,14 +116,13 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
 
 private[spark] object RemoteShuffleManager extends Logging {
 
-
-  var useOptimizedShuffleWriterThisTime = false
   /**
     * Helper method for determining whether a shuffle should use an optimized serialized shuffle
     * path or whether it should fall back to the original path that operates on deserialized objects.
     */
-  def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _]): Boolean = {
-    useOptimizedShuffleWriterThisTime && {
+  def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _], conf: SparkConf): Boolean = {
+    val optimizedShuffleEnabled = conf.getBoolean("spark.shuffle.optimizedPathEnabled", true)
+    optimizedShuffleEnabled && {
       val shufId = dependency.shuffleId
       val numPartitions = dependency.partitioner.numPartitions
       if (!dependency.serializer.supportsRelocationOfSerializedObjects) {
