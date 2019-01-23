@@ -22,8 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
-import org.apache.spark.shuffle.sort.{RemoteUnsafeShuffleWriter, SerializedShuffleHandle}
-import org.apache.spark.shuffle.sort.SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE
+import org.apache.spark.shuffle.sort._
 
 /**
   * In remote shuffle, data is written to a remote Hadoop compatible file system instead of local
@@ -53,7 +52,15 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (RemoteShuffleManager.canUseSerializedShuffle(dependency, conf)) {
+    if (RemoteShuffleManager.shouldBypassMergeSort(conf, dependency)) {
+      // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
+      // need map-side aggregation, then write numPartitions files directly and just concatenate
+      // them at the end. This avoids doing serialization and deserialization twice to merge
+      // together the spilled files, which would happen with the normal code path. The downside is
+      // having multiple files open at a time and thus more memory allocated to buffers.
+      new BypassMergeSortShuffleHandle[K, V](
+        shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
+    } else if (RemoteShuffleManager.canUseSerializedShuffle(dependency, conf)) {
       new SerializedShuffleHandle[K, V](
         shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else {
@@ -117,30 +124,14 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
 private[spark] object RemoteShuffleManager extends Logging {
 
   /**
-    * Helper method for determining whether a shuffle should use an optimized serialized shuffle
-    * path or whether it should fall back to the original path that operates on deserialized objects.
+    * Make the decision also referring to a configuration
     */
   def canUseSerializedShuffle(dependency: ShuffleDependency[_, _, _], conf: SparkConf): Boolean = {
     val optimizedShuffleEnabled = conf.getBoolean("spark.shuffle.optimizedPathEnabled", true)
-    optimizedShuffleEnabled && {
-      val shufId = dependency.shuffleId
-      val numPartitions = dependency.partitioner.numPartitions
-      if (!dependency.serializer.supportsRelocationOfSerializedObjects) {
-        log.debug(s"Can't use serialized shuffle for shuffle $shufId because the serializer, " +
-            s"${dependency.serializer.getClass.getName}, does not support object relocation")
-        false
-      } else if (dependency.mapSideCombine) {
-        log.debug(s"Can't use serialized shuffle for shuffle $shufId because we need to do " +
-            s"map-side aggregation")
-        false
-      } else if (numPartitions > MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE) {
-        log.debug(s"Can't use serialized shuffle for shuffle $shufId because it has more than " +
-            s"$MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE partitions")
-        false
-      } else {
-        log.debug(s"Can use serialized shuffle for shuffle $shufId")
-        true
-      }
-    }
+    optimizedShuffleEnabled && SortShuffleManager.canUseSerializedShuffle(dependency)
+  }
+
+  def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
+    SortShuffleWriter.shouldBypassMergeSort(conf, dep)
   }
 }

@@ -473,7 +473,9 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         for (int i = 0; i < spills.length; i++) {
           final long partitionLengthInSpill = spills[i].partitionLengths[partition];
           final long writeStartTime = System.nanoTime();
-          //Note by Chenzhao: Underlying buffer size inside this function call is 4k
+          //Note by Chenzhao: Although this function's name is transferTo, underneath this
+          // copyStream no NIO transfer(faster assumed) will be called. Underlying buffer size
+          // inside this function call is 4k
           Utils.copyStream(
               spillInputStreams[i],
               mergedFileOutputStream,
