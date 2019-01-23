@@ -20,6 +20,8 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
 
   private lazy val prefix = RemoteShuffleUtils.directoryPrefix
 
+  private lazy val fs = new Path(prefix).getFileSystem(new Configuration)
+
   def getDataFile(shuffleId: Int, mapId: Int): Path = {
     new Path(s"${prefix}/${shuffleId}_${mapId}.data")
   }
@@ -43,7 +45,6 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
       mapId: Int,
       lengths: Array[Long],
       dataTmp: Path): Unit = {
-    val fs = dataTmp.getFileSystem(new Configuration)
 
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = RemoteShuffleUtils.tempPathWith(indexFile)
@@ -200,6 +201,11 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
   override def stop(): Unit = {}
 }
 
+/**
+  * Something like [[org.apache.spark.network.buffer.FileSegmentManagedBuffer]], instead we only
+  * need createInputStream function, so we don't need a TransportConf field, which is intended to
+  * be used in other functions
+  */
 private[remote] class HadoopFileSegmentManagedBuffer(
     private val file: Path, private val offset: Long, private val length: Long)
     extends ManagedBuffer {

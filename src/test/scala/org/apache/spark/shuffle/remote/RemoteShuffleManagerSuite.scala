@@ -17,10 +17,13 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   private def testWithMultiplePath(name: String, loadDefaults: Boolean = true)
       (body: (SparkConf => Unit)): Unit = {
     test(name + " with general shuffle path") {
-      body(createSparkConf(loadDefaults, optimized = false))
+      body(createSparkConf(loadDefaults, bypassMergeSort = false, unsafeOptimized = false))
     }
     test(name + " with optimized shuffle path") {
-      body(createSparkConf(loadDefaults, optimized = true))
+      body(createSparkConf(loadDefaults, bypassMergeSort = false, unsafeOptimized = true))
+    }
+    test(name + " with bypass-merge-sort shuffle path") {
+      body(createSparkConf(loadDefaults, bypassMergeSort = true, unsafeOptimized = false))
     }
   }
 
@@ -48,10 +51,21 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     assert(newRdd.collect() === data)
   }
 
-  private def createSparkConf(loadDefaults: Boolean, optimized: Boolean): SparkConf = {
-    new SparkConf(loadDefaults)
-      .set("spark.shuffle.optimizedPathEnabled", optimized.toString)
+  private def createSparkConf(
+      loadDefaults: Boolean, bypassMergeSort: Boolean, unsafeOptimized: Boolean = true): SparkConf
+    = {
+    val smallThreshold = 1
+    val largeThreshold = 50
+    val conf = new SparkConf(loadDefaults)
+      .set("spark.shuffle.optimizedPathEnabled", unsafeOptimized.toString)
       .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+      // Use a strict threshold as default so that Bypass-Merge-Sort shuffle writer won't be used
+      .set("spark.shuffle.sort.bypassMergeThreshold", smallThreshold.toString)
+    if (bypassMergeSort) {
+      // Use a loose threshold
+      conf.set("spark.shuffle.sort.bypassMergeThreshold", largeThreshold.toString)
+    }
+    conf
   }
 
   override def afterEach(): Unit = {

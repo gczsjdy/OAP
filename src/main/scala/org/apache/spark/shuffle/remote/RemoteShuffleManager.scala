@@ -97,8 +97,19 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new RemoteUnsafeShuffleWriter(
-          env.blockManager, shuffleBlockResolver, context.taskMemoryManager(), unsafeShuffleHandle,
+          env.blockManager,
+          shuffleBlockResolver,
+          context.taskMemoryManager(),
+          unsafeShuffleHandle,
           mapId, context, env.conf)
+      case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
+        new RemoteBypassMergeSortShuffleWriter(
+          env.blockManager,
+          shuffleBlockResolver,
+          bypassMergeSortHandle,
+          mapId,
+          context,
+          env.conf)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new RemoteShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }
