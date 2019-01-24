@@ -2,32 +2,47 @@ package org.apache.spark.shuffle.remote
 
 import java.io._
 import java.nio.ByteBuffer
+import java.util.UUID
 
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 import org.apache.spark.shuffle.ShuffleBlockResolver
-import org.apache.spark.storage.ShuffleBlockId
+import org.apache.spark.storage.{ShuffleBlockId, TempShuffleBlockId}
 import org.apache.spark.util.Utils
 
 /**
   * Note by Chenzhao: optimization of index file cache
+  *
+  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
+  * It also manages the resource cleaning and temporary files creation,
+  * like a [[org.apache.spark.shuffle.IndexShuffleBlockResolver]] ++
+  * [[org.apache.spark.storage.DiskBlockManager]]
+  *
   */
-class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
+class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver with Logging {
 
-  private lazy val prefix = RemoteShuffleUtils.directoryPrefix
+  private val master = conf.get(RemoteShuffleConf.HDFS_MASTER_URI)
+  // Make it lazy so as to evaluate the SparkContext.getActive.get after its initialization
+  private lazy val applicationId =
+    if (Utils.isTesting) s"test${UUID.randomUUID()}" else SparkContext.getActive.get.applicationId
+  private def dirPrefix = s"hdfs://$master/shuffle/$applicationId"
 
-  private lazy val fs = new Path(prefix).getFileSystem(new Configuration)
+  private lazy val fs = new Path(dirPrefix).getFileSystem(new Configuration)
 
+/**
+  * Something like [[org.apache.spark.storage.DiskBlockManager.getFile()]]
+  */
   def getDataFile(shuffleId: Int, mapId: Int): Path = {
-    new Path(s"${prefix}/${shuffleId}_${mapId}.data")
+    new Path(s"${dirPrefix}/${shuffleId}_${mapId}.data")
   }
 
   def getIndexFile(shuffleId: Int, mapId: Int): Path = {
-    new Path(s"${prefix}/${shuffleId}_${mapId}.index")
+    new Path(s"${dirPrefix}/${shuffleId}_${mapId}.index")
   }
 
   /**
@@ -198,7 +213,15 @@ class RemoteShuffleBlockResolver extends ShuffleBlockResolver with Logging {
     }
   }
 
-  override def stop(): Unit = {}
+  def createTempShuffleBlock(): (TempShuffleBlockId, Path) = {
+    RemoteShuffleUtils.createTempShuffleBlock(dirPrefix)
+  }
+
+  override def stop(): Unit = {
+    val dir = new Path(dirPrefix)
+    val fs = dir.getFileSystem(new Configuration)
+    fs.delete(dir, true)
+  }
 }
 
 /**

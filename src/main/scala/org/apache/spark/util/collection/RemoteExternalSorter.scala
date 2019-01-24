@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleUtils}
+import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleUtils}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
 /**
@@ -92,6 +92,7 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
   */
 private[spark] class RemoteExternalSorter[K, V, C](
     context: TaskContext,
+    resolver: RemoteShuffleBlockResolver,
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
@@ -272,7 +273,7 @@ private[spark] class RemoteExternalSorter[K, V, C](
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more context.
-    val (blockId, file) = RemoteShuffleUtils.createTempShuffleBlock()
+    val (blockId, file) = resolver.createTempShuffleBlock()
 
     // These variables are reset after each flush
     var objectsWritten: Long = 0

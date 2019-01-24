@@ -12,6 +12,8 @@ import scala.collection.mutable.ArrayBuffer
 
 class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkContext {
 
+  var shuffleManager: RemoteShuffleManager = _
+
   private def prepareMapOutput(
       resolver: RemoteShuffleBlockResolver, shuffleId: Int, mapId: Int, blocks: Array[Byte]*) {
     val dataTmp = RemoteShuffleUtils.tempPathWith(resolver.getDataFile(shuffleId, mapId))
@@ -35,7 +37,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     val shuffleId = 1
 
     val conf = new SparkConf()
-    val shuffleManager = new RemoteShuffleManager(conf)
+    shuffleManager = new RemoteShuffleManager(conf)
     val resolver = shuffleManager.shuffleBlockResolver
 
     val numMaps = 3
@@ -75,11 +77,13 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
       assert(answer === expected(index))
       assert(input.available() == 0)
     }
+  }
 
-    val dir = new Path(RemoteShuffleUtils.directoryPrefix)
-    val fs = dir.getFileSystem(new Configuration)
-    fs.delete(dir, true)
-
+  override def afterEach(): Unit = {
+    super.afterEach()
+    if (shuffleManager != null) {
+      shuffleManager.stop()
+    }
   }
 
   private def cleanAll(files: Path*): Unit = {

@@ -2,23 +2,27 @@ package org.apache.spark.shuffle.remote
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfterEach
 
 class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEach {
 
+  val conf = new SparkConf()
+
   var dataFile: Path = _
   var indexFile: Path = _
   var dataTmp: Path = _
+  
+  var resolver: RemoteShuffleBlockResolver = _
 
   val shuffleId = 1
   val mapId = 2
 
   test("Commit shuffle files multiple times") {
 
-    val resolver = new RemoteShuffleBlockResolver
+    resolver = new RemoteShuffleBlockResolver(conf)
 
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -117,7 +121,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
   test("get block data") {
 
-    val resolver = new RemoteShuffleBlockResolver
+    resolver = new RemoteShuffleBlockResolver(conf)
 
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -149,7 +153,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
   test("createInputStream of HadoopFileSegmentManagedBuffer") {
 
-    val resolver = new RemoteShuffleBlockResolver
+    resolver = new RemoteShuffleBlockResolver(conf)
 
     dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
@@ -175,7 +179,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
   test("createInputStream of HadoopFileSegmentManagedBuffer, with no data") {
 
-    val resolver = new RemoteShuffleBlockResolver
+    resolver = new RemoteShuffleBlockResolver(conf)
 
     dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
@@ -204,6 +208,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
   }
 
   override def afterEach() {
+    super.afterEach()
     if (dataFile != null) {
       // Also delete tmp files if needed
       deleteFilesWithPrefix(dataFile)
@@ -212,6 +217,9 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     if (indexFile != null) {
       // Also delete tmp files if needed
       deleteFilesWithPrefix(indexFile)
+    }
+    if (resolver != null) {
+      resolver.stop()
     }
   }
 

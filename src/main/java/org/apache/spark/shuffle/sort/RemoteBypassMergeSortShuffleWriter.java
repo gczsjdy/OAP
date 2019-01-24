@@ -149,7 +149,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
     partitionWriterSegments = new HadoopFileSegment[numPartitions];
     for (int i = 0; i < numPartitions; i++) {
       final Tuple2<TempShuffleBlockId, Path> tempShuffleBlockIdPlusFile =
-          RemoteShuffleUtils.createTempShuffleBlock();
+          shuffleBlockResolver.createTempShuffleBlock();
       final Path file = tempShuffleBlockIdPlusFile._2();
       final BlockId blockId = tempShuffleBlockIdPlusFile._1();
       partitionWriters[i] =

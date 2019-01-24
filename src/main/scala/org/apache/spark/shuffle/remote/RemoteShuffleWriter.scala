@@ -26,7 +26,7 @@ import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.collection.RemoteExternalSorter
 
 private[spark] class RemoteShuffleWriter[K, V, C](
-    shuffleBlockResolver: RemoteShuffleBlockResolver,
+    resolver: RemoteShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
     mapId: Int,
     context: TaskContext)
@@ -53,26 +53,27 @@ private[spark] class RemoteShuffleWriter[K, V, C](
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
       new RemoteExternalSorter[K, V, C](
-        context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+        context, resolver, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
       new RemoteExternalSorter[K, V, V](
-        context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
+        context, resolver, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer
+      )
     }
     sorter.insertAll(records)
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
     // because it just opens a single file, so is typically too fast to measure accurately
     // (see SPARK-3570).
-    val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
+    val output = resolver.getDataFile(dep.shuffleId, mapId)
     val tmp = RemoteShuffleUtils.tempPathWith(output)
     val fs = output.getFileSystem(new Configuration)
     try {
       val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
-      shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
+      resolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
       mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
     } finally {
       if (fs.exists(tmp) && !fs.delete(tmp, true)) {

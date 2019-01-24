@@ -226,6 +226,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         memoryManager,
         blockManager,
         taskContext,
+        shuffleBlockResolver,
         initialSortBufferSize,
         partitioner.numPartitions(),
         sparkConf,

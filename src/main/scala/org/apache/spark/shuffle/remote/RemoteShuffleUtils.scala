@@ -21,20 +21,14 @@ import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.storage.{BlockId, TempShuffleBlockId}
-import org.apache.spark.util.Utils
-import org.apache.spark.{SparkContext, SparkEnv}
 
 object RemoteShuffleUtils {
 
   val env = SparkEnv.get
-
-  private val master = "localhost:9001"
-  private lazy val applicationId =
-    if (Utils.isTesting) s"test${UUID.randomUUID()}" else SparkContext.getActive.get.applicationId
-  def directoryPrefix = s"hdfs://$master/shuffle/$applicationId"
 
   /**
    * Something like [[org.apache.spark.util.Utils.tempFileWith()]], instead returning Path
@@ -43,21 +37,22 @@ object RemoteShuffleUtils {
     new Path(path.toString + "." + UUID.randomUUID())
   }
 
-  def getPath(blockId: BlockId): Path = {
-    new Path(s"${directoryPrefix}/${blockId.name}")
+  private def getPath(blockId: BlockId, dirUri: String): Path = {
+    new Path(s"${dirUri}/${blockId.name}")
   }
 
   /**
    * Something like [[org.apache.spark.storage.DiskBlockManager.createTempShuffleBlock()]], instead
    * returning Path
    */
-  def createTempShuffleBlock(): (TempShuffleBlockId, Path) = {
+  private[remote] def createTempShuffleBlock(dirUri: String): (TempShuffleBlockId, Path) = {
     var blockId = new TempShuffleBlockId(UUID.randomUUID())
-    val fs = getPath(blockId).getFileSystem(new Configuration)
-    while (fs.exists(getPath(blockId))) {
+    val tmpPath = getPath(blockId, dirUri)
+    val fs = tmpPath.getFileSystem(new Configuration)
+    while (fs.exists(tmpPath)) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
-    (blockId, getPath(blockId))
+    (blockId, tmpPath)
   }
 
   /**

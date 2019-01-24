@@ -43,7 +43,7 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
     */
   private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
 
-  override val shuffleBlockResolver = new RemoteShuffleBlockResolver()
+  override val shuffleBlockResolver = new RemoteShuffleBlockResolver(conf)
 
   /**
     * Obtains a [[ShuffleHandle]] to pass to tasks.

@@ -1,7 +1,5 @@
 package org.apache.spark.shuffle.remote
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 
 class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
@@ -68,10 +66,4 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     conf
   }
 
-  override def afterEach(): Unit = {
-    super.afterEach()
-    val dir = new Path(RemoteShuffleUtils.directoryPrefix)
-    val fs = dir.getFileSystem(new Configuration)
-    fs.delete(dir, true)
-  }
 }

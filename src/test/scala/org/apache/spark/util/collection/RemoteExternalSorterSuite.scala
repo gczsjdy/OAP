@@ -22,10 +22,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.remote.RemoteShuffleUtils
+import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver
 import org.apache.spark.storage.TestBlockId
 
 class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
+
+  var sorter: RemoteExternalSorter[Int, Int, Int] = _
+  var resolver: RemoteShuffleBlockResolver = _
 
   testWithMultipleSer("no sorting or partial aggregation with spilling") { (conf: SparkConf) =>
     basicSorterTest(conf, withPartialAgg = false, withOrdering = false, withSpilling = true)
@@ -96,8 +99,9 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       }
     val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    val sorter =
-      new RemoteExternalSorter[Int, Int, Int](context, agg, Some(new HashPartitioner(3)), ord)
+    resolver = new RemoteShuffleBlockResolver(conf)
+    sorter = new RemoteExternalSorter[Int, Int, Int](
+        context, resolver, agg, Some(new HashPartitioner(3)), ord)
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
     if (withSpilling) {
       assert(sorter.numSpills > 0, "sorter did not spill")
@@ -145,8 +149,9 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
       }
     val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    val sorter =
-      new RemoteExternalSorter[Int, Int, Int](context, agg, Some(new HashPartitioner(3)), ord)
+    resolver = new RemoteShuffleBlockResolver(conf)
+    sorter = new RemoteExternalSorter[Int, Int, Int](
+      context, resolver, agg, Some(new HashPartitioner(3)), ord)
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
     if (withSpilling) {
       assert(sorter.numSpills > 0, "sorter did not spill")
@@ -155,8 +160,7 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     }
 
     val testBlockId = TestBlockId("hi")
-    val path = new Path(
-      s"${RemoteShuffleUtils.directoryPrefix}/UnitTest/RemoteExternalSorterSuite/1")
+    val path = resolver.createTempShuffleBlock()._2
     sorter.writePartitionedFile(testBlockId, path)
     val results =
       new SimpleRemoteBlockObjectReader[Int, Int](
@@ -165,8 +169,16 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
 
     assert(results === expected)
 
-    cleanFiles(path)
-    sorter.stop()
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    if (resolver != null) {
+      resolver.stop()
+    }
+    if (sorter != null) {
+      sorter.stop()
+    }
   }
 
   private def cleanFiles(paths: Path*): Unit = {

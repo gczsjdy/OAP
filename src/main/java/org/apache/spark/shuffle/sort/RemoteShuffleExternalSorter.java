@@ -26,9 +26,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.serializer.SerializerManager;
-import org.apache.spark.shuffle.remote.HadoopFileSegment;
-import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter;
-import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
+import org.apache.spark.shuffle.remote.*;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -83,6 +81,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
   private final TaskContext taskContext;
+  private final RemoteShuffleBlockResolver resolver;
   private final ShuffleWriteMetrics writeMetrics;
 
   /**
@@ -118,6 +117,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
       TaskMemoryManager memoryManager,
       BlockManager blockManager,
       TaskContext taskContext,
+      RemoteShuffleBlockResolver resolver,
       int initialSize,
       int numPartitions,
       SparkConf conf,
@@ -128,6 +128,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
+    this.resolver = resolver;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes =
@@ -177,8 +178,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     // Because this output will be read during shuffle, its compression codec must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
     // createTempShuffleBlock here; see SPARK-3426 for more details.
-    final Tuple2<TempShuffleBlockId, Path> spilledFileInfo =
-        RemoteShuffleUtils.createTempShuffleBlock();
+    final Tuple2<TempShuffleBlockId, Path> spilledFileInfo = resolver.createTempShuffleBlock();
     final Path file = spilledFileInfo._2();
     final TempShuffleBlockId blockId = spilledFileInfo._1();
     final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
