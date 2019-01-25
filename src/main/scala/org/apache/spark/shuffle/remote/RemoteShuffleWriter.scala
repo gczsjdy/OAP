@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.ShuffleBlockId
-import org.apache.spark.util.collection.RemoteExternalSorter
+import org.apache.spark.util.collection.RemoteSorter
 
 private[spark] class RemoteShuffleWriter[K, V, C](
     resolver: RemoteShuffleBlockResolver,
@@ -38,7 +38,7 @@ private[spark] class RemoteShuffleWriter[K, V, C](
 
   private val dep = handle.dependency
 
-  private var sorter: RemoteExternalSorter[K, V, _] = null
+  private var sorter: RemoteSorter[K, V, _] = null
 
   // Are we in the process of stopping? Because map tasks can call stop() with success = true
   // and then call stop() with success = false if they get an exception, we want to make sure
@@ -52,13 +52,13 @@ private[spark] class RemoteShuffleWriter[K, V, C](
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
     sorter = if (dep.mapSideCombine) {
-      new RemoteExternalSorter[K, V, C](
+      new RemoteSorter[K, V, C](
         context, resolver, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
       // if the operation being run is sortByKey.
-      new RemoteExternalSorter[K, V, V](
+      new RemoteSorter[K, V, V](
         context, resolver, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer
       )
     }

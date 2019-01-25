@@ -29,6 +29,7 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
+import org.apache.spark.shuffle.remote
 import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleUtils}
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
 
@@ -90,7 +91,7 @@ import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
   *
   *  - Users are expected to call stop() at the end to delete all the intermediate files.
   */
-private[spark] class RemoteExternalSorter[K, V, C](
+private[spark] class RemoteSorter[K, V, C](
     context: TaskContext,
     resolver: RemoteShuffleBlockResolver,
     aggregator: Option[Aggregator[K, V, C]] = None,

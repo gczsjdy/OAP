@@ -22,12 +22,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver
+import org.apache.spark.shuffle.remote.{RemoteAggregator, RemoteShuffleBlockResolver}
 import org.apache.spark.storage.TestBlockId
 
-class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
+class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
 
-  var sorter: RemoteExternalSorter[Int, Int, Int] = _
+  var sorter: RemoteSorter[Int, Int, Int] = _
   var resolver: RemoteShuffleBlockResolver = _
 
   testWithMultipleSer("no sorting or partial aggregation with spilling") { (conf: SparkConf) =>
@@ -93,14 +93,15 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", conf)
     val agg =
       if (withPartialAgg) {
-        Some(new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j))
+        Some(new RemoteAggregator(
+          new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)))
       } else {
         None
       }
     val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     resolver = new RemoteShuffleBlockResolver(conf)
-    sorter = new RemoteExternalSorter[Int, Int, Int](
+    sorter = new RemoteSorter[Int, Int, Int](
         context, resolver, agg, Some(new HashPartitioner(3)), ord)
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
     if (withSpilling) {
@@ -143,14 +144,15 @@ class RemoteExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test", conf)
     val agg =
       if (withPartialAgg) {
-        Some(new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j))
+        Some(new RemoteAggregator(
+          new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)))
       } else {
         None
       }
     val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     resolver = new RemoteShuffleBlockResolver(conf)
-    sorter = new RemoteExternalSorter[Int, Int, Int](
+    sorter = new RemoteSorter[Int, Int, Int](
       context, resolver, agg, Some(new HashPartitioner(3)), ord)
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
     if (withSpilling) {
