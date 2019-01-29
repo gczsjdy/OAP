@@ -20,20 +20,21 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
-import scala.collection.BufferedIterator
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import com.google.common.io.ByteStreams
-
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleUtils}
+import org.apache.spark.storage.BlockId
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.RemoteAppendOnlyMap.HashComparator
+import org.apache.spark.{SparkEnv, TaskContext}
+
+import scala.collection.{BufferedIterator, mutable}
+import scala.collection.mutable.ArrayBuffer
 
 /**
   * :: DeveloperApi ::
@@ -57,7 +58,7 @@ class RemoteAppendOnlyMap[K, V, C](
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
     serializer: Serializer = SparkEnv.get.serializer,
-    blockManager: BlockManager = SparkEnv.get.blockManager,
+    resolver: RemoteShuffleBlockResolver,
     context: TaskContext = TaskContext.get(),
     serializerManager: SerializerManager = SparkEnv.get.serializerManager)
     extends Spillable[SizeTracker](context.taskMemoryManager())
@@ -70,23 +71,12 @@ class RemoteAppendOnlyMap[K, V, C](
       "Spillable collections should not be instantiated outside of tasks")
   }
 
-  // Backwards-compatibility constructor for binary compatibility
-  def this(
-      createCombiner: V => C,
-      mergeValue: (C, V) => C,
-      mergeCombiners: (C, C) => C,
-      serializer: Serializer,
-      blockManager: BlockManager) {
-    this(createCombiner, mergeValue, mergeCombiners, serializer, blockManager, TaskContext.get())
-  }
-
   /**
     * Exposed for testing
     */
   @volatile private[collection] var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = SparkEnv.get.conf
-  private val diskBlockManager = blockManager.diskBlockManager
 
   /**
     * Size of object batches when reading/writing from serializers.
@@ -214,8 +204,9 @@ class RemoteAppendOnlyMap[K, V, C](
     */
   private[this] def spillMemoryIteratorToDisk(inMemoryIterator: Iterator[(K, C)])
   : DiskMapIterator = {
-    val (blockId, file) = diskBlockManager.createTempLocalBlock()
-    val writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, writeMetrics)
+    val (blockId, file) = resolver.createTempLocalBlock()
+    val writer: RemoteBlockObjectWriter = RemoteShuffleUtils.getRemoteWriter(
+      blockId, file, serializerManager, ser, fileBufferSize, writeMetrics)
     var objectsWritten = 0
 
     // List of batch sizes (bytes) in the order they are written to disk
@@ -252,8 +243,9 @@ class RemoteAppendOnlyMap[K, V, C](
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
         writer.revertPartialWritesAndClose()
-        if (file.exists()) {
-          if (!file.delete()) {
+        val fs = file.getFileSystem(new Configuration)
+        if (fs.exists(file)) {
+          if (!fs.delete(file, true)) {
             logWarning(s"Error deleting ${file}")
           }
         }
@@ -449,19 +441,21 @@ class RemoteAppendOnlyMap[K, V, C](
   /**
     * An iterator that returns (K, C) pairs in sorted order from an on-disk map
     */
-  private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
+  private class DiskMapIterator(file: Path, blockId: BlockId, batchSizes: ArrayBuffer[Long])
       extends Iterator[(K, C)]
   {
+    val fs = file.getFileSystem(new Configuration)
+
     private val batchOffsets = batchSizes.scanLeft(0L)(_ + _)  // Size will be batchSize.length + 1
-    assert(file.length() == batchOffsets.last,
+    assert(fs.getFileStatus(file).getLen == batchOffsets.last,
       "File length is not equal to the last batch offset:\n" +
-          s"    file length = ${file.length}\n" +
+          s"    file length = ${fs.getFileStatus(file).getLen}\n" +
           s"    last batch offset = ${batchOffsets.last}\n" +
           s"    all batch offsets = ${batchOffsets.mkString(",")}"
     )
 
     private var batchIndex = 0  // Which batch we're in
-  private var fileStream: FileInputStream = null
+    private var fileStream: FSDataInputStream = null
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
@@ -484,8 +478,8 @@ class RemoteAppendOnlyMap[K, V, C](
         }
 
         val start = batchOffsets(batchIndex)
-        fileStream = new FileInputStream(file)
-        fileStream.getChannel.position(start)
+        fileStream = fs.open(file)
+        fileStream.seek(start)
         batchIndex += 1
 
         val end = batchOffsets(batchIndex)
@@ -560,8 +554,8 @@ class RemoteAppendOnlyMap[K, V, C](
         fileStream.close()
         fileStream = null
       }
-      if (file.exists()) {
-        if (!file.delete()) {
+      if (fs.exists(file)) {
+        if (!fs.delete(file, true)) {
           logWarning(s"Error deleting ${file}")
         }
       }

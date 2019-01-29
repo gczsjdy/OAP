@@ -15,13 +15,14 @@ import org.apache.spark.{Aggregator, TaskContext}
   * @param mergeCombiners function to merge outputs from multiple mergeValue function.
   */
 @DeveloperApi
-class RemoteAggregator[K, V, C](agg: Aggregator[K, V, C])
+class RemoteAggregator[K, V, C](agg: Aggregator[K, V, C], resolver: RemoteShuffleBlockResolver)
     extends Aggregator[K, V, C](agg.createCombiner, agg.mergeValue, agg.mergeCombiners) {
 
   override def combineValuesByKey(
       iter: Iterator[_ <: Product2[K, V]],
       context: TaskContext): Iterator[(K, C)] = {
-    val combiners = new RemoteAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+    val combiners = new RemoteAppendOnlyMap[K, V, C](
+      createCombiner, mergeValue, mergeCombiners, resolver = resolver)
     combiners.insertAll(iter)
     updateMetrics(context, combiners)
     combiners.iterator
@@ -30,7 +31,8 @@ class RemoteAggregator[K, V, C](agg: Aggregator[K, V, C])
   override def combineCombinersByKey(
       iter: Iterator[_ <: Product2[K, C]],
       context: TaskContext): Iterator[(K, C)] = {
-    val combiners = new RemoteAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+    val combiners = new RemoteAppendOnlyMap[K, C, C](
+      identity, mergeCombiners, mergeCombiners, resolver = resolver)
     combiners.insertAll(iter)
     updateMetrics(context, combiners)
     combiners.iterator

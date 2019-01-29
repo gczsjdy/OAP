@@ -74,7 +74,7 @@ private[spark] class RemoteShuffleReader[K, C](
     val interruptibleIter = new InterruptibleIterator[(Any, Any)](context, metricIter)
 
     val aggregatedIter: Iterator[Product2[K, C]] = if (dep.aggregator.isDefined) {
-      val remoteAggregator = dep.aggregator.map(new RemoteAggregator(_))
+      val remoteAggregator = dep.aggregator.map(new RemoteAggregator(_, resolver))
       if (dep.mapSideCombine) {
         // We are reading values that are already combined
         val combinedKeyValuesIterator = interruptibleIter.asInstanceOf[Iterator[(K, C)]]

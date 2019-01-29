@@ -12,7 +12,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 import org.apache.spark.shuffle.ShuffleBlockResolver
-import org.apache.spark.storage.{ShuffleBlockId, TempShuffleBlockId}
+import org.apache.spark.storage.{ShuffleBlockId, TempLocalBlockId, TempShuffleBlockId}
 import org.apache.spark.util.Utils
 
 /**
@@ -215,6 +215,10 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   def createTempShuffleBlock(): (TempShuffleBlockId, Path) = {
     RemoteShuffleUtils.createTempShuffleBlock(dirPrefix)
+  }
+
+  def createTempLocalBlock(): (TempLocalBlockId, Path) = {
+    RemoteShuffleUtils.createTempLocalBlock(dirPrefix)
   }
 
   override def stop(): Unit = {

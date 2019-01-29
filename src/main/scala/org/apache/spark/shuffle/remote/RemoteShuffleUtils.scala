@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.storage.{BlockId, TempShuffleBlockId}
+import org.apache.spark.storage.{BlockId, TempLocalBlockId, TempShuffleBlockId}
 
 object RemoteShuffleUtils {
 
@@ -51,6 +51,20 @@ object RemoteShuffleUtils {
     val fs = tmpPath.getFileSystem(new Configuration)
     while (fs.exists(tmpPath)) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
+    }
+    (blockId, tmpPath)
+  }
+
+  /**
+    * Something like [[org.apache.spark.storage.DiskBlockManager.createTempLocalBlock()]], instead
+    * returning Path
+    */
+  private[remote] def createTempLocalBlock(dirUri: String): (TempLocalBlockId, Path) = {
+    var blockId = new TempLocalBlockId(UUID.randomUUID())
+    val tmpPath = getPath(blockId, dirUri)
+    val fs = tmpPath.getFileSystem(new Configuration)
+    while (fs.exists(tmpPath)) {
+      blockId = new TempLocalBlockId(UUID.randomUUID())
     }
     (blockId, tmpPath)
   }

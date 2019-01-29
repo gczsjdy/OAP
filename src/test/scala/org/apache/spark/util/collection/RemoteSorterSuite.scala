@@ -91,16 +91,16 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
       conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
     }
     sc = new SparkContext("local", "test", conf)
+    resolver = new RemoteShuffleBlockResolver(conf)
     val agg =
       if (withPartialAgg) {
         Some(new RemoteAggregator(
-          new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)))
+          new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j), resolver))
       } else {
         None
       }
     val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    resolver = new RemoteShuffleBlockResolver(conf)
     sorter = new RemoteSorter[Int, Int, Int](
         context, resolver, agg, Some(new HashPartitioner(3)), ord)
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
@@ -142,16 +142,16 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
       conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
     }
     sc = new SparkContext("local", "test", conf)
+    resolver = new RemoteShuffleBlockResolver(conf)
     val agg =
       if (withPartialAgg) {
         Some(new RemoteAggregator(
-          new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j)))
+          new Aggregator[Int, Int, Int](i => i, (i, j) => i + j, (i, j) => i + j), resolver))
       } else {
         None
       }
     val ord = if (withOrdering) Some(implicitly[Ordering[Int]]) else None
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
-    resolver = new RemoteShuffleBlockResolver(conf)
     sorter = new RemoteSorter[Int, Int, Int](
       context, resolver, agg, Some(new HashPartitioner(3)), ord)
     sorter.insertAll((0 until size).iterator.map { i => (i / 4, i) })
