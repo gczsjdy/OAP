@@ -480,7 +480,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           Utils.copyStream(
               spillInputStreams[i],
               mergedFileOutputStream,
-              true,
+              false,
               true);
           spillInputChannelPositions[i] += partitionLengthInSpill;
           writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
