@@ -189,13 +189,13 @@ private[spark] class RemoteBlockObjectWriter(
       objOut.close()
       streamOpen = false
 
-      /* NOTE by Chenzhao: Leave this first */
-//      if (syncWrites) {
-//        // Force outstanding writes to disk and track how long it takes
-//        val start = System.nanoTime()
-//        fos.getFD.sync()
-//        writeMetrics.incWriteTime(System.nanoTime() - start)
-//      }
+      /* NOTE by Chenzhao: Right? */
+      if (syncWrites) {
+        // Force outstanding writes to disk and track how long it takes
+        val start = System.nanoTime()
+        fsdos.hsync()
+        writeMetrics.incWriteTime(System.nanoTime() - start)
+      }
 
       val pos = fsdos.getPos
       val fileSegment = new HadoopFileSegment(file, committedPosition, pos - committedPosition)
@@ -224,30 +224,28 @@ private[spark] class RemoteBlockObjectWriter(
   def revertPartialWritesAndClose(): Path = {
     // Discard current writes. We do this by flushing the outstanding writes and then
     // truncating the file to its initial position.
-//    Utils.tryWithSafeFinally {
-//      if (initialized) {
-//        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
-//        writeMetrics.decRecordsWritten(numRecordsWritten)
-//        streamOpen = false
-//        closeResources()
-//      }
-//    } {
-//      var truncateStream: FSDataOutputStream = null
-//      try {
-//        val fs = file.getFileSystem(new Configuration)
-//        truncateStream = fs.create(file)
-//        fs.
-//        truncateStream.getChannel.truncate(committedPosition)
-//      } catch {
-//        case e: Exception =>
-//          logError("Uncaught exception while reverting partial writes to file " + file, e)
-//      } finally {
-//        if (truncateStream != null) {
-//          truncateStream.close()
-//          truncateStream = null
-//        }
-//      }
-//    }
+    Utils.tryWithSafeFinally {
+      if (initialized) {
+        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
+        writeMetrics.decRecordsWritten(numRecordsWritten)
+        streamOpen = false
+        closeResources()
+      }
+    } {
+      var truncateStream: FSDataOutputStream = null
+      try {
+        val fs = file.getFileSystem(new Configuration)
+        fs.truncate(file, committedPosition)
+      } catch {
+        case e: Exception =>
+          logError("Uncaught exception while reverting partial writes to file " + file, e)
+      } finally {
+        if (truncateStream != null) {
+          truncateStream.close()
+          truncateStream = null
+        }
+      }
+    }
     file
   }
 

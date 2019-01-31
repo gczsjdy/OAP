@@ -31,6 +31,7 @@ import scala.concurrent.duration._
 import scala.ref.WeakReference
 
 /**
+  * TODO: Why will this UT leave uncleaned files after testing?
   * [[org.apache.spark.shuffle.remote.RemoteAggregator]] && [[RemoteAppendOnlyMap]] are both tested
   */
 class RemoteAppendOnlyMapSuite extends SparkFunSuite
