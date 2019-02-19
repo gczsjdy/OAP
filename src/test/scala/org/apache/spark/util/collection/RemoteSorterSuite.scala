@@ -22,8 +22,9 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.remote.{RemoteAggregator, RemoteShuffleBlockResolver}
-import org.apache.spark.storage.TestBlockId
+import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.remote.{RemoteAggregator, RemoteShuffleBlockResolver, RemoteShuffleUtils}
+import org.apache.spark.storage.ShuffleBlockId
 
 class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -123,12 +124,24 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   private class SimpleRemoteBlockObjectReader[K, V](
       serializerManager: SerializerManager, serializerInstance: SerializerInstance) {
-    def read(blockId: TestBlockId, file: Path): Iterator[Product2[K, V]] = {
+
+    def read(mapperInfo: ShuffleBlockId,
+        startPartition: Int,
+        endPartition: Int,
+        resolver: RemoteShuffleBlockResolver,
+        file: Path)
+      : Iterator[Product2[K, V]] = {
       val fs = file.getFileSystem(new Configuration)
       val inputStream = fs.open(file)
-      serializerInstance.deserializeStream(
-        serializerManager.wrapStream(blockId, inputStream))
-          .asKeyValueIterator.asInstanceOf[Iterator[Product2[K, V]]]
+      (startPartition until endPartition).flatMap { i =>
+        val blockId = ShuffleBlockId(mapperInfo.shuffleId, mapperInfo.mapId, i)
+        val buf = resolver.getBlockData(blockId)
+
+        val rawStream = buf.createInputStream()
+        serializerInstance.deserializeStream(
+          serializerManager.wrapStream(blockId, rawStream))
+            .asKeyValueIterator.asInstanceOf[Iterator[Product2[K, V]]]
+      }.toIterator
     }
   }
 
@@ -161,12 +174,18 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
       assert(sorter.numSpills === 0, "sorter spilled")
     }
 
-    val testBlockId = TestBlockId("hi")
-    val path = resolver.createTempShuffleBlock()._2
-    sorter.writePartitionedFile(testBlockId, path)
+    val (shuffleId, mapId) = (66, 666)
+    val testShuffleBlockId = ShuffleBlockId(
+      shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
+    val path = resolver.getDataFile(shuffleId, mapId)
+    val tmp = RemoteShuffleUtils.tempPathWith(path)
+    val lengths = sorter.writePartitionedFile(testShuffleBlockId, tmp)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, tmp)
+
     val results =
       new SimpleRemoteBlockObjectReader[Int, Int](
-        sc.env.serializerManager, sc.env.serializer.newInstance()).read(testBlockId, path).toSet
+        sc.env.serializerManager, sc.env.serializer.newInstance()).read(
+        testShuffleBlockId, 0, lengths.length, resolver, path).toSet
     val expected = (0 until size).map { i => (i / 4, i)}.toSet
 
     assert(results === expected)
