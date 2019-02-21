@@ -19,14 +19,11 @@ package org.apache.spark.shuffle.remote
 
 import java.io.{IOException, InputStream}
 
-import javax.annotation.concurrent.GuardedBy
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.{SparkException, TaskContext}
-
-import scala.collection.mutable
 
 /**
   * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -54,12 +51,6 @@ final class RemoteShuffleBlockIterator(
 
   private[this] val startTime = System.currentTimeMillis
 
-  /**
-    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
-    * at most once for those corrupted blocks.
-    */
-  private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
-
   private val insideIter = {
     for (mapId <- 0 until numMappers; reduceId <- startPartition until endPartition) yield {
       // Note by Chenzhao: Can be optimized by reading consecutive blocks
@@ -69,28 +60,16 @@ final class RemoteShuffleBlockIterator(
       val in = try {
         buf.createInputStream()
       } catch {
-        // The exception could only be throwed by local shuffle block
         case e: IOException =>
-          logError("Failed to create input stream from local block", e)
+          // Actually here we know the buf is a HadoopFileSegmentManagedBuffer
+          logError("Failed to create input stream from block backed by HDFS file segment", e)
           buf.release()
-          throwCurrentlySimpleMayChangeException(blockId, e)
+          throwDetailedException(blockId, e)
       }
       val input = streamWrapper(blockId, in)
       (blockId, input)
     }
   }.toIterator
-
-  /**
-    * A set to store the files used for shuffling remote huge blocks. Files in this set will be
-    * deleted when cleanup. This is a layer of defensiveness against disk file leaks.
-    */
-  @GuardedBy("this")
-  private[this] val shuffleFilesSet = mutable.HashSet[DownloadFile]()
-
-  /**
-    */
-  private[this] def cleanup() {
-  }
 
   override def hasNext: Boolean = insideIter.hasNext
 
@@ -109,7 +88,7 @@ final class RemoteShuffleBlockIterator(
     insideIter.next()
   }
 
-  private def throwCurrentlySimpleMayChangeException(blockId: ShuffleBlockId, e: Throwable) = {
+  private def throwDetailedException(blockId: ShuffleBlockId, e: Throwable) = {
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
         throw new SparkException(

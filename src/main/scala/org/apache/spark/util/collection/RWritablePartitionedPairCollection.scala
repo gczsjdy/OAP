@@ -25,13 +25,18 @@ import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter
   * NOTE: This is to override Spark 2.4.0's WritablePartitionedIterator: Changing the writeNext
   * interface's args type to RemoteBlockObjectWriter
   *
+  * Note: We made several places returning a [[RemoteBlockObjectWriter]]. And we didn't just
+  * override [[WritablePartitionedPairCollection]], [[PartitionedPairBuffer]] and
+  * [[PartitionedAppendOnlyMap]] in order to let the default local sort shuffle manager still work
+  * with the remote shuffle package existed
+  *
   * A common interface for size-tracking collections of key-value pairs that
   *
   *  - Have an associated partition for each key-value pair.
   *  - Support a memory-efficient sorted iterator
   *  - Support a WritablePartitionedIterator for writing the contents directly as bytes.
   */
-private[spark] trait WritablePartitionedPairCollection[K, V] {
+private[spark] trait RWritablePartitionedPairCollection[K, V] {
   /**
     * Insert a key-value pair with a partition into the collection
     */
@@ -50,9 +55,9 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
     * This may destroy the underlying collection.
     */
   def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
-  : WritablePartitionedIterator = {
+  : RWritablePartitionedIterator = {
     val it = partitionedDestructiveSortedIterator(keyComparator)
-    new WritablePartitionedIterator {
+    new RWritablePartitionedIterator {
       private[this] var cur = if (it.hasNext) it.next() else null
 
       def writeNext(writer: RemoteBlockObjectWriter): Unit = {
@@ -67,7 +72,7 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
   }
 }
 
-private[spark] object WritablePartitionedPairCollection {
+private[spark] object RWritablePartitionedPairCollection {
   /**
     * A comparator for (Int, K) pairs that orders them by only their partition ID.
     */
@@ -98,7 +103,7 @@ private[spark] object WritablePartitionedPairCollection {
   * Iterator that writes elements to a DiskBlockObjectWriter instead of returning them. Each element
   * has an associated partition.
   */
-private[spark] trait WritablePartitionedIterator {
+private[spark] trait RWritablePartitionedIterator {
   def writeNext(writer: RemoteBlockObjectWriter): Unit
 
   def hasNext(): Boolean

@@ -98,7 +98,7 @@ private[spark] class RemoteSorter[K, V, C](
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
     serializer: Serializer = SparkEnv.get.serializer)
-    extends Spillable[WritablePartitionedPairCollection[K, C]](context.taskMemoryManager())
+    extends Spillable[RWritablePartitionedPairCollection[K, C]](context.taskMemoryManager())
         with Logging {
 
   private val conf = SparkEnv.get.conf
@@ -129,8 +129,8 @@ private[spark] class RemoteSorter[K, V, C](
   // Data structures to store in-memory objects before we spill. Depending on whether we have an
   // Aggregator set, we either put objects into an AppendOnlyMap where we combine them, or we
   // store them in an array buffer.
-  @volatile private var map = new PartitionedAppendOnlyMap[K, C]
-  @volatile private var buffer = new PartitionedPairBuffer[K, C]
+  @volatile private var map = new RPartitionedAppendOnlyMap[K, C]
+  @volatile private var buffer = new RPartitionedPairBuffer[K, C]
 
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
@@ -222,12 +222,12 @@ private[spark] class RemoteSorter[K, V, C](
     if (usingMap) {
       estimatedSize = map.estimateSize()
       if (maybeSpill(map, estimatedSize)) {
-        map = new PartitionedAppendOnlyMap[K, C]
+        map = new RPartitionedAppendOnlyMap[K, C]
       }
     } else {
       estimatedSize = buffer.estimateSize()
       if (maybeSpill(buffer, estimatedSize)) {
-        buffer = new PartitionedPairBuffer[K, C]
+        buffer = new RPartitionedPairBuffer[K, C]
       }
     }
 
@@ -242,7 +242,7 @@ private[spark] class RemoteSorter[K, V, C](
     *
     * @param collection whichever collection we're using (map or buffer)
     */
-  override protected[this] def spill(collection: WritablePartitionedPairCollection[K, C]): Unit = {
+  override protected[this] def spill(collection: RWritablePartitionedPairCollection[K, C]): Unit = {
     val inMemoryIterator = collection.destructiveSortedWritablePartitionedIterator(comparator)
     val spillFile = spillMemoryIteratorToDisk(inMemoryIterator)
     spills += spillFile
@@ -269,7 +269,7 @@ private[spark] class RemoteSorter[K, V, C](
   /**
     * Spill contents of in-memory iterator to a temporary file on disk.
     */
-  private[this] def spillMemoryIteratorToDisk(inMemoryIterator: WritablePartitionedIterator)
+  private[this] def spillMemoryIteratorToDisk(inMemoryIterator: RWritablePartitionedIterator)
   : SpilledFile = {
     // Because these files may be read during shuffle, their compression must be controlled by
     // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
@@ -659,7 +659,7 @@ private[spark] class RemoteSorter[K, V, C](
     */
   def partitionedIterator: Iterator[(Int, Iterator[Product2[K, C]])] = {
     val usingMap = aggregator.isDefined
-    val collection: WritablePartitionedPairCollection[K, C] = if (usingMap) map else buffer
+    val collection: RWritablePartitionedPairCollection[K, C] = if (usingMap) map else buffer
     if (spills.isEmpty) {
       // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
       // we don't even need to sort by anything other than partition ID
@@ -800,7 +800,7 @@ private[spark] class RemoteSorter[K, V, C](
       if (hasSpilled) {
         false
       } else {
-        val inMemoryIterator = new WritablePartitionedIterator {
+        val inMemoryIterator = new RWritablePartitionedIterator {
           private[this] var cur = if (upstream.hasNext) upstream.next() else null
 
           def writeNext(writer: RemoteBlockObjectWriter): Unit = {
