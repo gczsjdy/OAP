@@ -103,7 +103,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
    */
   private final LinkedList<MemoryBlock> allocatedPages = new LinkedList<>();
 
-  private final LinkedList<SpillInfo> spills = new LinkedList<>();
+  private final LinkedList<RemoteSpillInfo> spills = new LinkedList<>();
 
   /** Peak memory used by this sorter so far, in bytes. **/
   private long peakMemoryUsedBytes;
@@ -181,7 +181,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     final Tuple2<TempShuffleBlockId, Path> spilledFileInfo = resolver.createTempShuffleBlock();
     final Path file = spilledFileInfo._2();
     final TempShuffleBlockId blockId = spilledFileInfo._1();
-    final SpillInfo spillInfo = new SpillInfo(numPartitions, file, blockId);
+    final RemoteSpillInfo spillInfo = new RemoteSpillInfo(numPartitions, file, blockId);
 
     // Unfortunately, we need a serializer instance in order to construct a RemoteBlockObjectWriter.
     // Our write path doesn't actually use this serializer (since we end up calling the `write()`
@@ -329,7 +329,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     if (!spills.isEmpty()) {
       fs = spills.get(0).file.getFileSystem(new Configuration());
     }
-    for (SpillInfo spill : spills) {
+    for (RemoteSpillInfo spill : spills) {
       if (fs.exists(spill.file) && !fs.delete(spill.file, true)) {
         logger.error("Unable to delete spill file {}", spill.file.toString());
       }
@@ -426,7 +426,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
    *         into this sorter, then this will return an empty array.
    * @throws IOException
    */
-  public SpillInfo[] closeAndGetSpills() throws IOException {
+  public RemoteSpillInfo[] closeAndGetSpills() throws IOException {
     if (inMemSorter != null) {
       // Do not count the final file towards the spill count.
       writeSortedFile(true);
@@ -434,7 +434,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
       inMemSorter.free();
       inMemSorter = null;
     }
-    return spills.toArray(new SpillInfo[spills.size()]);
+    return spills.toArray(new RemoteSpillInfo[spills.size()]);
   }
 
 }

@@ -23,12 +23,12 @@ import org.apache.spark.storage.TempShuffleBlockId;
 /**
  * Metadata for a block of data written by {@link RemoteShuffleExternalSorter}.
  */
-final class SpillInfo {
+final class RemoteSpillInfo {
   final long[] partitionLengths;
   final Path file;
   final TempShuffleBlockId blockId;
 
-  SpillInfo(int numPartitions, Path file, TempShuffleBlockId blockId) {
+  RemoteSpillInfo(int numPartitions, Path file, TempShuffleBlockId blockId) {
     this.partitionLengths = new long[numPartitions];
     this.file = file;
     this.blockId = blockId;

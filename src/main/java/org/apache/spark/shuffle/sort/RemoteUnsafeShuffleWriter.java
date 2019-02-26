@@ -241,7 +241,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     updatePeakMemoryUsed();
     serBuffer = null;
     serOutputStream = null;
-    final SpillInfo[] spills = sorter.closeAndGetSpills();
+    final RemoteSpillInfo[] spills = sorter.closeAndGetSpills();
     sorter = null;
     final long[] partitionLengths;
     final Path output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
@@ -252,7 +252,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         partitionLengths = mergeSpills(spills, tmp);
       } finally {
 
-        for (SpillInfo spill : spills) {
+        for (RemoteSpillInfo spill : spills) {
           if (fs.exists(spill.file) && ! fs.delete(spill.file, true)) {
             logger.error("Error while deleting spill file {}", spill.file.toString());
           }
@@ -296,7 +296,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpills(SpillInfo[] spills, Path outputFile) throws IOException {
+  private long[] mergeSpills(RemoteSpillInfo[] spills, Path outputFile) throws IOException {
     final FileSystem fs = outputFile.getFileSystem(new Configuration());
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
@@ -345,7 +345,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // in-memory records, we write out the in-memory records to a file but do not count that
         // final write as bytes spilled (instead, it's accounted as shuffle write). The merge needs
         // to be counted as shuffle write, but this will lead to double-counting of the final
-        // SpillInfo's bytes.
+        // RemoteSpillInfo's bytes.
         writeMetrics.decBytesWritten(fs.getFileStatus(spills[spills.length - 1].file).getLen());
         writeMetrics.incBytesWritten(fs.getFileStatus(outputFile).getLen());
         return partitionLengths;
@@ -360,7 +360,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   /**
    * Merges spill files using Java FileStreams. This code path is typically slower than
-   * the NIO-based merge, {@link RemoteUnsafeShuffleWriter#mergeSpillsWithTransferTo(SpillInfo[],
+   * the NIO-based merge, {@link RemoteUnsafeShuffleWriter#mergeSpillsWithTransferTo(RemoteSpillInfo[],
    * Path)}, and it's mostly used in cases where the IO compression codec does not support
    * concatenation of compressed data, when encryption is enabled, or when users have
    * explicitly disabled use of {@code transferTo} in order to work around kernel bugs.
@@ -375,7 +375,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpillsWithFileStream(
-      SpillInfo[] spills,
+      RemoteSpillInfo[] spills,
       Path outputFile,
       @Nullable CompressionCodec compressionCodec) throws IOException {
     assert (spills.length >= 2);
@@ -450,7 +450,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpillsWithTransferTo(SpillInfo[] spills, Path outputFile) throws IOException {
+  private long[] mergeSpillsWithTransferTo(RemoteSpillInfo[] spills, Path outputFile) throws IOException {
     assert (spills.length >= 2);
     final FileSystem fs = spills[0].file.getFileSystem(new Configuration());
     final int numPartitions = partitioner.numPartitions();

@@ -19,7 +19,7 @@ package org.apache.spark.util.collection
 
 import java.util.Comparator
 
-import org.apache.spark.util.collection.WritablePartitionedPairCollection._
+import org.apache.spark.util.collection.RWritablePartitionedPairCollection._
 
 /**
   * Note: Only the class name is modified. We didn't just override
