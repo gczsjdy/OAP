@@ -7,7 +7,7 @@ import java.util.UUID
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
@@ -28,9 +28,9 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   private val master = conf.get(RemoteShuffleConf.STORAGE_MASTER_URI)
   private val rootDir = conf.get(RemoteShuffleConf.SHUFFLE_FILES_ROOT_DIRECTORY)
-  // Make it lazy so as to evaluate the SparkContext.getActive.get after its initialization
-  private lazy val applicationId =
-    if (Utils.isTesting) s"test${UUID.randomUUID()}" else SparkContext.getActive.get.applicationId
+  // conf.getAppId may not always work, because during unit tests we may just new a Resolver
+  // instead of getting one from the ShuffleManager referenced by SparkContext
+  private val applicationId = if (Utils.isTesting) s"test${UUID.randomUUID()}" else conf.getAppId
   private def dirPrefix = s"$master/$rootDir/$applicationId"
 
   private lazy val fs = new Path(dirPrefix).getFileSystem(new Configuration)
