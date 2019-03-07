@@ -26,11 +26,12 @@ import org.apache.spark.util.Utils
   */
 class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver with Logging {
 
-  private val master = conf.get(RemoteShuffleConf.HDFS_MASTER_URI)
+  private val master = conf.get(RemoteShuffleConf.STORAGE_MASTER_URI)
+  private val rootDir = conf.get(RemoteShuffleConf.SHUFFLE_FILES_ROOT_DIRECTORY)
   // Make it lazy so as to evaluate the SparkContext.getActive.get after its initialization
   private lazy val applicationId =
     if (Utils.isTesting) s"test${UUID.randomUUID()}" else SparkContext.getActive.get.applicationId
-  private def dirPrefix = s"hdfs://$master/shuffle/$applicationId"
+  private def dirPrefix = s"$master/$rootDir/$applicationId"
 
   private lazy val fs = new Path(dirPrefix).getFileSystem(new Configuration)
 

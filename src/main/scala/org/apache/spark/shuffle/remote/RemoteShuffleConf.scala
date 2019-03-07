@@ -4,10 +4,16 @@ import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 
 object RemoteShuffleConf {
 
-  val HDFS_MASTER_URI: ConfigEntry[String] =
-    ConfigBuilder("spark.shuffle.remote.hdfsMasterUri")
-        .doc("Store shuffle files contacting this HDFS namenode")
+  val STORAGE_MASTER_URI: ConfigEntry[String] =
+    ConfigBuilder("spark.shuffle.remote.storageMasterUri")
+        .doc("Contact this storage master while persisting shuffle files")
         .stringConf
-        .createWithDefault("localhost:9001")
+        .createWithDefault("hdfs://localhost:9001")
+
+  val SHUFFLE_FILES_ROOT_DIRECTORY: ConfigEntry[String] =
+    ConfigBuilder("spark.shuffle.remote.filesRootDirectory")
+        .doc("Use this as the root directory for shuffle files")
+        .stringConf
+        .createWithDefault("/shuffle")
 
 }
