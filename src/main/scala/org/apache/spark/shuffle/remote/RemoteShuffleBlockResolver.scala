@@ -28,9 +28,12 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   private val master = conf.get(RemoteShuffleConf.STORAGE_MASTER_URI)
   private val rootDir = conf.get(RemoteShuffleConf.SHUFFLE_FILES_ROOT_DIRECTORY)
-  // conf.getAppId may not always work, because during unit tests we may just new a Resolver
+  // 1. Use lazy evaluation due to at the time this class(and its fields) is initialized,
+  // SparkEnv._conf is not yet set
+  // 2. conf.getAppId may not always work, because during unit tests we may just new a Resolver
   // instead of getting one from the ShuffleManager referenced by SparkContext
-  private val applicationId = if (Utils.isTesting) s"test${UUID.randomUUID()}" else conf.getAppId
+  private lazy val applicationId =
+    if (Utils.isTesting) s"test${UUID.randomUUID()}" else conf.getAppId
   private def dirPrefix = s"$master/$rootDir/$applicationId"
 
   private lazy val fs = new Path(dirPrefix).getFileSystem(new Configuration)
