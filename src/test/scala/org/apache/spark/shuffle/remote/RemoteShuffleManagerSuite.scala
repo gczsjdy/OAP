@@ -1,6 +1,6 @@
 package org.apache.spark.shuffle.remote
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark._
 
 class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -10,6 +10,15 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     "repartition with some map output empty")(repartitionWithEmptyMapOutput)
 
   testWithMultiplePath("sort")(sort)
+
+  test("decide using bypass-merge-sort shuffle writer or not") {
+    sc = new SparkContext("local", "test", new SparkConf(true))
+    val partitioner = new HashPartitioner(100)
+    val rdd = sc.parallelize((1 to 10).map(x => (x, x + 1)), 10)
+    val dependency = new ShuffleDependency[Int, Int, Int](rdd, partitioner)
+    assert(RemoteShuffleManager.shouldBypassMergeSort(new SparkConf(true), dependency)
+        == false)
+  }
 
   // Optimized shuffle writer & non-optimized shuffle writer
   private def testWithMultiplePath(name: String, loadDefaults: Boolean = true)
