@@ -36,7 +36,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     if (Utils.isTesting) s"test${UUID.randomUUID()}" else conf.getAppId
   private def dirPrefix = s"$master/$rootDir/$applicationId"
 
-  private lazy val fs = new Path(dirPrefix).getFileSystem(new Configuration)
+  private lazy val fs = new Path(dirPrefix).getFileSystem(RemoteShuffleManager.getHadoopConf)
 
 /**
   * Something like [[org.apache.spark.storage.DiskBlockManager.getFile()]]
@@ -122,7 +122,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     * If so, return the partition lengths in the data file. Otherwise return null.
     */
   private def checkIndexAndDataFile(index: Path, data: Path, blocks: Int): Array[Long] = {
-    val fs = index.getFileSystem(new Configuration)
+    val fs = index.getFileSystem(RemoteShuffleManager.getHadoopConf)
 
     // the index file should exist(of course) and have `block + 1` longs as offset.
     if (!fs.exists(index) || fs.getFileStatus(index).getLen != (blocks + 1) * 8L) {
@@ -176,7 +176,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
     // class of issue from re-occurring in the future which is why they are left here even though
     // SPARK-22982 is fixed.
-    val fs = indexFile.getFileSystem(new Configuration)
+    val fs = indexFile.getFileSystem(RemoteShuffleManager.getHadoopConf)
     val in = fs.open(indexFile)
     in.seek(blockId.reduceId * 8L)
     try {
@@ -202,7 +202,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     */
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
-    val fs = file.getFileSystem(new Configuration())
+    val fs = file.getFileSystem(RemoteShuffleManager.getHadoopConf)
     if (fs.exists(file)) {
       if (!fs.delete(file, true)) {
         logWarning(s"Error deleting data ${file.toString}")
@@ -227,7 +227,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   override def stop(): Unit = {
     val dir = new Path(dirPrefix)
-    val fs = dir.getFileSystem(new Configuration)
+    val fs = dir.getFileSystem(RemoteShuffleManager.getHadoopConf)
     fs.delete(dir, true)
   }
 }
@@ -250,7 +250,7 @@ private[remote] class HadoopFileSegmentManagedBuffer(
     if (length == 0) {
       new ByteArrayInputStream(new Array[Byte](0))
     } else {
-      val fs = file.getFileSystem(new Configuration)
+      val fs = file.getFileSystem(RemoteShuffleManager.getHadoopConf)
       var is: InputStream = null
       var shouldClose = true
 

@@ -69,7 +69,7 @@ private[spark] class RemoteShuffleWriter[K, V, C](
     // (see SPARK-3570).
     val output = resolver.getDataFile(dep.shuffleId, mapId)
     val tmp = RemoteShuffleUtils.tempPathWith(output)
-    val fs = output.getFileSystem(new Configuration)
+    val fs = output.getFileSystem(RemoteShuffleManager.getHadoopConf)
     try {
       val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)

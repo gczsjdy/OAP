@@ -19,7 +19,9 @@ package org.apache.spark.shuffle.remote
 
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.sort._
@@ -28,7 +30,10 @@ import org.apache.spark.shuffle.sort._
   * In remote shuffle, data is written to a remote Hadoop compatible file system instead of local
   * disks.
   */
-private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManager with Logging {
+private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends ShuffleManager with
+    Logging {
+
+  RemoteShuffleManager.setActive(this)
 
   logWarning("******** Remote Shuffle Manager is used ********")
 
@@ -133,6 +138,21 @@ private[spark] class RemoteShuffleManager(conf: SparkConf) extends ShuffleManage
 
 
 private[spark] object RemoteShuffleManager extends Logging {
+
+  private var _active: RemoteShuffleManager = _
+
+  def setActive(update: RemoteShuffleManager): Unit = _active = update
+
+  val getHadoopConf = {
+    require(_active != null, "Active RemoteShuffleManager unassigned! It's probably never newed")
+    // Remote shuffling deals with the disaggregated computing and storage architecture, so that the
+    // configuration of storage cluster cannot be locally loaded to executors. This is why we use
+    // false here.
+    // We may need better method to load default HDFS configuration of the remote storage cluster
+    val hadoopConf = new Configuration(false)
+    (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(_active.conf, hadoopConf)
+    hadoopConf
+  }
 
   /**
     * Make the decision also referring to a configuration
