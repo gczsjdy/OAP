@@ -29,7 +29,6 @@ import org.apache.spark.storage.ShuffleBlockId
 class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   var sorter: RemoteSorter[Int, Int, Int] = _
-  var resolver: RemoteShuffleBlockResolver = _
 
   testWithMultipleSer("no sorting or partial aggregation with spilling") { (conf: SparkConf) =>
     basicSorterTest(conf, withPartialAgg = false, withOrdering = false, withSpilling = true)
@@ -57,6 +56,7 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
     // Ensure that we actually have multiple batches per spill file
     conf.set("spark.shuffle.spill.batchSize", "10")
     conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
+    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
     conf
   }
 
@@ -69,11 +69,6 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
     test(name + " with kryo ser") {
       body(createSparkConf(loadDefaults, kryo = true))
     }
-    /**
-      * Note by Chenzhao: Need to revisit this, lack of append argument in HDFS API induces writing
-      * a header every time for Java serializer. The current way of commitAndGet may need to be
-      * modified
-      */
     test(name + " with java ser") {
       body(createSparkConf(loadDefaults, kryo = false))
     }
@@ -92,7 +87,8 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
       conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
     }
     sc = new SparkContext("local", "test", conf)
-    resolver = new RemoteShuffleBlockResolver(conf)
+    val shuffleManager = SparkEnv.get.shuffleManager
+    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[RemoteShuffleBlockResolver]
     val agg =
       if (withPartialAgg) {
         Some(new RemoteAggregator(
@@ -155,7 +151,8 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
       conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", (size / 2).toString)
     }
     sc = new SparkContext("local", "test", conf)
-    resolver = new RemoteShuffleBlockResolver(conf)
+    val shuffleManager = SparkEnv.get.shuffleManager
+    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[RemoteShuffleBlockResolver]
     val agg =
       if (withPartialAgg) {
         Some(new RemoteAggregator(
@@ -194,9 +191,6 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
 
   override def afterEach(): Unit = {
     super.afterEach()
-    if (resolver != null) {
-      resolver.stop()
-    }
     if (sorter != null) {
       sorter.stop()
     }

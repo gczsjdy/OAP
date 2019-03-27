@@ -15,14 +15,15 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
   var indexFile: Path = _
   var dataTmp: Path = _
   
-  var resolver: RemoteShuffleBlockResolver = _
+  var shuffleManager: RemoteShuffleManager = _
 
   val shuffleId = 1
   val mapId = 2
 
   test("Commit shuffle files multiple times") {
 
-    resolver = new RemoteShuffleBlockResolver(conf)
+    shuffleManager = new RemoteShuffleManager(conf)
+    val resolver = shuffleManager.shuffleBlockResolver
 
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -121,7 +122,8 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
   test("get block data") {
 
-    resolver = new RemoteShuffleBlockResolver(conf)
+    shuffleManager = new RemoteShuffleManager(conf)
+    val resolver = shuffleManager.shuffleBlockResolver
 
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -153,7 +155,8 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
   test("createInputStream of HadoopFileSegmentManagedBuffer") {
 
-    resolver = new RemoteShuffleBlockResolver(conf)
+    shuffleManager = new RemoteShuffleManager(conf)
+    val resolver = shuffleManager.shuffleBlockResolver
 
     dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
@@ -179,7 +182,8 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
   test("createInputStream of HadoopFileSegmentManagedBuffer, with no data") {
 
-    resolver = new RemoteShuffleBlockResolver(conf)
+    shuffleManager = new RemoteShuffleManager(conf)
+    val resolver = shuffleManager.shuffleBlockResolver
 
     dataFile = resolver.getDataFile(shuffleId, mapId)
     val fs = dataFile.getFileSystem(new Configuration)
@@ -218,8 +222,8 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
       // Also delete tmp files if needed
       deleteFilesWithPrefix(indexFile)
     }
-    if (resolver != null) {
-      resolver.stop()
+    if (shuffleManager != null) {
+      shuffleManager.stop()
     }
   }
 

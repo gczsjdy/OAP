@@ -25,7 +25,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerMa
 
 class RemoteBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  var resolver: RemoteShuffleBlockResolver = _
+  var shuffleManager: RemoteShuffleManager = _
 
   lazy val fs = createWriter()._2.getFileSystem(new Configuration)
 
@@ -35,8 +35,8 @@ class RemoteBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach
 
   override def afterEach(): Unit = {
     try {
-      if (resolver != null) {
-        resolver.stop()
+      if (shuffleManager != null) {
+        shuffleManager.stop()
       }
     } finally {
       super.afterEach()
@@ -45,7 +45,8 @@ class RemoteBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach
 
   private def createWriter(): (RemoteBlockObjectWriter, Path, ShuffleWriteMetrics) = {
     val conf = new SparkConf()
-    resolver = new RemoteShuffleBlockResolver(conf)
+    shuffleManager = new RemoteShuffleManager(conf)
+    val resolver = shuffleManager.shuffleBlockResolver
     val file = resolver.createTempLocalBlock()._2
     val serializerManager = new SerializerManager(new JavaSerializer(conf), conf)
     val writeMetrics = new ShuffleWriteMetrics()

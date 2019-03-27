@@ -212,9 +212,6 @@ private[spark] class RemoteBlockObjectWriter(
 
 
   /**
-    * NOTE by Chenzhao: No revert currently(when exception occurs), due to the lack of HDFS truncate
-    * API
-    *
     * Reverts writes that haven't been committed yet. Callers should invoke this function
     * when there are runtime exceptions. This method will not throw, though it may be
     * unsuccessful in truncating written data.

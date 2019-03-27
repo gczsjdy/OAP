@@ -143,12 +143,12 @@ private[spark] object RemoteShuffleManager extends Logging {
 
   def setActive(update: RemoteShuffleManager): Unit = _active = update
 
-  val getHadoopConf = {
+  lazy val getHadoopConf = {
     require(_active != null, "Active RemoteShuffleManager unassigned! It's probably never newed")
     // Remote shuffling deals with the disaggregated computing and storage architecture, so that the
     // configuration of storage cluster cannot be locally loaded to executors. This is why we use
     // false here.
-    // We may need better method to load default HDFS configuration of the remote storage cluster
+    // Note by Chenzhao: We need to load default HDFS configuration of the remote storage cluster
     val hadoopConf = new Configuration(false)
     (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(_active.conf, hadoopConf)
     hadoopConf

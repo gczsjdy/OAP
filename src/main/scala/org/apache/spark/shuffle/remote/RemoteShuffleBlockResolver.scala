@@ -5,7 +5,6 @@ import java.nio.ByteBuffer
 import java.util.UUID
 
 import com.google.common.io.ByteStreams
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
