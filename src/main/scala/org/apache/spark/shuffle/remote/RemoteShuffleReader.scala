@@ -22,6 +22,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
+import org.apache.spark.storage.RemoteShuffleBlockIterator
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
 
@@ -35,7 +36,8 @@ private[spark] class RemoteShuffleReader[K, C](
     startPartition: Int,
     endPartition: Int,
     context: TaskContext,
-    serializerManager: SerializerManager = SparkEnv.get.serializerManager)
+    serializerManager: SerializerManager = SparkEnv.get.serializerManager,
+    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
     extends ShuffleReader[K, C] with Logging {
 
   private val dep = handle.dependency
@@ -45,11 +47,12 @@ private[spark] class RemoteShuffleReader[K, C](
     val wrappedStreams = new RemoteShuffleBlockIterator(
       context,
       resolver,
-      handle.shuffleId,
-      handle.numMaps,
-      startPartition,
-      endPartition,
-      serializerManager.wrapStream)
+      mapOutputTracker.
+        getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition).flatMap(_._2),
+      serializerManager.wrapStream,
+      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
+      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
+      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue))
 
     val serializerInstance = dep.serializer.newInstance()
 

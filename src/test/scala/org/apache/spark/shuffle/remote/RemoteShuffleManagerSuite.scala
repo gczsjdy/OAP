@@ -36,7 +36,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
   private def repartition(conf: SparkConf): Unit = {
     sc = new SparkContext("local", "test_repartition", conf)
-    val data = 1 until 20
+    val data = 1 until 100
     val rdd = sc.parallelize(data, 10)
     val newRdd = rdd.repartition(20)
     assert(newRdd.collect().sorted === data)

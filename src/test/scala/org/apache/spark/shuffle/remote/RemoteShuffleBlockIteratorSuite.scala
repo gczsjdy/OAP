@@ -5,7 +5,7 @@ import java.io.InputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
-import org.apache.spark.storage.BlockId
+import org.apache.spark.storage.{BlockId, RemoteShuffleBlockIterator, ShuffleBlockId}
 import org.apache.spark.util.Utils
 
 import scala.collection.mutable.ArrayBuffer
@@ -59,24 +59,31 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     val startPartition = 1
     val endPartition = 3
 
+    val blockInfos = for (i <- 0 until numMaps; j <- startPartition until endPartition) yield {
+      (ShuffleBlockId(shuffleId, i, j), 1L)
+    }
+
     val iter = new RemoteShuffleBlockIterator(
       TaskContext.get(),
       resolver,
-      shuffleId,
-      numMaps,
-      startPartition,
-      endPartition,
-      (_: BlockId, input: InputStream) => input)
+      blockInfos.toIterator,
+      (_: BlockId, input: InputStream) => input,
+      48 * 1024 * 1024,
+      Int.MaxValue)
 
     val expected =
-      Array[Array[Byte]](expectPart0, expectPart1,expectPart2, expectPart3, expectPart4, expectPart5)
+      expectPart0 ++ expectPart1 ++ expectPart2 ++ expectPart3 ++ expectPart4 ++ expectPart5
 
-    iter.map(_._2).zipWithIndex.foreach { case (input, index) =>
-      val answer = new Array[Byte](expected(index).length)
-      input.read(answer)
-      assert(answer === expected(index))
-      assert(input.available() == 0)
+    val answer = new ArrayBuffer[Byte]()
+    iter.map(_._2).foreach { case input =>
+      var current: Int = -1
+      while ({current = input.read(); current != -1}) {
+        answer += current.toByte
+      }
     }
+    // Shuffle doesn't guarantee that the blocks are returned as ordered in blockInfos,
+    // so the answer and expected should be sorted before compared
+    assert(answer.map(_.toInt).sorted.zip(expected.map(_.toInt).sorted).forall{case (byteAns, byteExp) => byteAns === byteExp})
   }
 
   override def afterEach(): Unit = {
