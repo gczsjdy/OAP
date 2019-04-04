@@ -27,7 +27,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
-    val fs = dataFile.getFileSystem(new Configuration)
+    val fs = resolver.fs
 
     dataTmp = RemoteShuffleUtils.tempPathWith(dataFile)
 
@@ -127,7 +127,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
 
     indexFile = resolver.getIndexFile(shuffleId, mapId)
     dataFile = resolver.getDataFile(shuffleId, mapId)
-    val fs = dataFile.getFileSystem(new Configuration)
+    val fs = resolver.fs
 
     val partitionId = 3
     val expected = Array[Byte](8, 7, 6, 5)
@@ -159,7 +159,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     val resolver = shuffleManager.shuffleBlockResolver
 
     dataFile = resolver.getDataFile(shuffleId, mapId)
-    val fs = dataFile.getFileSystem(new Configuration)
+    val fs = resolver.fs
 
     val out = fs.create(dataFile)
     val expected = Array[Byte](2, 4)
@@ -186,7 +186,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
     val resolver = shuffleManager.shuffleBlockResolver
 
     dataFile = resolver.getDataFile(shuffleId, mapId)
-    val fs = dataFile.getFileSystem(new Configuration)
+    val fs = resolver.fs
 
     val answer = new Array[Byte](0)
     val expected = new Array[Byte](0)
@@ -198,7 +198,7 @@ class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterE
   }
 
   private def deleteFilesWithPrefix(prefixPath: Path): Unit = {
-    val fs = prefixPath.getFileSystem(new Configuration)
+    val fs = prefixPath.getFileSystem(new Configuration(false))
     val parentDir = prefixPath.getParent
     if (fs.exists(parentDir)) {
       val iter = fs.listFiles(parentDir, false)

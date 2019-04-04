@@ -17,7 +17,6 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.memory.MemoryTestingUtils
@@ -127,7 +126,7 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
         resolver: RemoteShuffleBlockResolver,
         file: Path)
       : Iterator[Product2[K, V]] = {
-      val fs = file.getFileSystem(new Configuration)
+      val fs = resolver.fs
       val inputStream = fs.open(file)
       (startPartition until endPartition).flatMap { i =>
         val blockId = ShuffleBlockId(mapperInfo.shuffleId, mapperInfo.mapId, i)
@@ -196,10 +195,4 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  private def cleanFiles(paths: Path*): Unit = {
-    paths.foreach { path =>
-      val fs = path.getFileSystem(new Configuration)
-      fs.delete(path, true)
-    }
-  }
 }

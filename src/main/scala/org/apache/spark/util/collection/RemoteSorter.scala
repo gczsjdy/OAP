@@ -20,18 +20,17 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.ByteStreams
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.remote
-import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleUtils}
-import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter}
+import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleManager, RemoteShuffleUtils}
+import org.apache.spark.storage.BlockId
+
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 /**
   * NOTE: This version of Spark 2.4.0 ExternalSorter is currently imported for the interface
@@ -102,6 +101,7 @@ private[spark] class RemoteSorter[K, V, C](
         with Logging {
 
   private val conf = SparkEnv.get.conf
+  private lazy val fs = RemoteShuffleManager.getFileSystem
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
   private val shouldPartition = numPartitions > 1
@@ -325,7 +325,6 @@ private[spark] class RemoteSorter[K, V, C](
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
         writer.revertPartialWritesAndClose()
-        val fs = file.getFileSystem(new Configuration)
         if (fs.exists(file)) {
           if (!fs.delete(file, true)) {
             logWarning(s"Error deleting ${file}")
@@ -521,7 +520,6 @@ private[spark] class RemoteSorter[K, V, C](
 
         val start = batchOffsets(batchId)
 
-        val fs = spill.file.getFileSystem(new Configuration)
         fileStream = fs.open(spill.file)
         fileStream.seek(start)
         batchId += 1
@@ -737,10 +735,9 @@ private[spark] class RemoteSorter[K, V, C](
   }
 
   def stop(): Unit = {
-    spills.foreach(s => s.file.getFileSystem(new Configuration()).delete(s.file, true))
+    spills.foreach(s => fs.delete(s.file, true))
     spills.clear()
-    forceSpillFiles.foreach(
-      s => s.file.getFileSystem(new Configuration()).delete(s.file, true))
+    forceSpillFiles.foreach(s => fs.delete(s.file, true))
     forceSpillFiles.clear()
     if (map != null || buffer != null) {
       map = null // So that the memory can be garbage-collected

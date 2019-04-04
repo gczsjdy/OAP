@@ -21,20 +21,19 @@ import java.io._
 import java.util.Comparator
 
 import com.google.common.io.ByteStreams
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
-import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleUtils}
+import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleManager, RemoteShuffleUtils}
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.RemoteAppendOnlyMap.HashComparator
 import org.apache.spark.{SparkEnv, TaskContext}
 
-import scala.collection.{BufferedIterator, mutable}
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.{BufferedIterator, mutable}
 
 /**
   * :: DeveloperApi ::
@@ -70,6 +69,8 @@ class RemoteAppendOnlyMap[K, V, C](
     throw new IllegalStateException(
       "Spillable collections should not be instantiated outside of tasks")
   }
+
+  private lazy val fs = RemoteShuffleManager.getFileSystem
 
   /**
     * Exposed for testing
@@ -243,7 +244,6 @@ class RemoteAppendOnlyMap[K, V, C](
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
         writer.revertPartialWritesAndClose()
-        val fs = file.getFileSystem(new Configuration)
         if (fs.exists(file)) {
           if (!fs.delete(file, true)) {
             logWarning(s"Error deleting ${file}")
@@ -444,8 +444,6 @@ class RemoteAppendOnlyMap[K, V, C](
   private class DiskMapIterator(file: Path, blockId: BlockId, batchSizes: ArrayBuffer[Long])
       extends Iterator[(K, C)]
   {
-    val fs = file.getFileSystem(new Configuration)
-
     private val batchOffsets = batchSizes.scanLeft(0L)(_ + _)  // Size will be batchSize.length + 1
     assert(fs.getFileStatus(file).getLen == batchOffsets.last,
       "File length is not equal to the last batch offset:\n" +

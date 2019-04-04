@@ -31,10 +31,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.spark.*;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.shuffle.IndexShuffleBlockResolver;
-import org.apache.spark.shuffle.remote.HadoopFileSegment;
-import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter;
-import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver;
-import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
+import org.apache.spark.shuffle.remote.*;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -179,7 +176,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
       partitionLengths = writePartitionedFile(tmp);
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
     } finally {
-      FileSystem fs = tmp.getFileSystem(new Configuration());
+      FileSystem fs = RemoteShuffleManager.getFileSystem();
       if (fs.exists(tmp) && !fs.delete(tmp, true)) {
         logger.error("Error while deleting temp file {}", tmp.toString());
       }
@@ -198,7 +195,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker).
    */
   private long[] writePartitionedFile(Path outputFile) throws IOException {
-    final FileSystem fs = outputFile.getFileSystem(new Configuration());
+    final FileSystem fs = RemoteShuffleManager.getFileSystem();
     // Track location of the partition starts in the output file
     final long[] lengths = new long[numPartitions];
     if (partitionWriters == null) {
@@ -254,7 +251,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
             for (RemoteBlockObjectWriter writer : partitionWriters) {
               // This method explicitly does _not_ throw exceptions:
               Path file = writer.revertPartialWritesAndClose();
-              fs = file.getFileSystem(new Configuration());
+              fs = RemoteShuffleManager.getFileSystem();
               if (!fs.delete(file, true)) {
                 logger.error("Error while deleting file {}", file.toString());
               }

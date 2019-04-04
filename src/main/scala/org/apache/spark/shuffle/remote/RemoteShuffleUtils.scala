@@ -19,7 +19,6 @@ package org.apache.spark.shuffle.remote
 
 import java.util.UUID
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -48,7 +47,7 @@ object RemoteShuffleUtils {
   private[remote] def createTempShuffleBlock(dirUri: String): (TempShuffleBlockId, Path) = {
     var blockId = new TempShuffleBlockId(UUID.randomUUID())
     val tmpPath = getPath(blockId, dirUri)
-    val fs = tmpPath.getFileSystem(new Configuration)
+    val fs = RemoteShuffleManager.getFileSystem
     while (fs.exists(tmpPath)) {
       blockId = new TempShuffleBlockId(UUID.randomUUID())
     }
@@ -62,7 +61,7 @@ object RemoteShuffleUtils {
   private[remote] def createTempLocalBlock(dirUri: String): (TempLocalBlockId, Path) = {
     var blockId = new TempLocalBlockId(UUID.randomUUID())
     val tmpPath = getPath(blockId, dirUri)
-    val fs = tmpPath.getFileSystem(new Configuration)
+    val fs = RemoteShuffleManager.getFileSystem
     while (fs.exists(tmpPath)) {
       blockId = new TempLocalBlockId(UUID.randomUUID())
     }

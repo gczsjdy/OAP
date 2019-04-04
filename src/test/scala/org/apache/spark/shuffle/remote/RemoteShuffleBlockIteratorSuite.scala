@@ -17,7 +17,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
   private def prepareMapOutput(
       resolver: RemoteShuffleBlockResolver, shuffleId: Int, mapId: Int, blocks: Array[Byte]*) {
     val dataTmp = RemoteShuffleUtils.tempPathWith(resolver.getDataFile(shuffleId, mapId))
-    val fs = dataTmp.getFileSystem(new Configuration)
+    val fs = resolver.fs
     val out = fs.create(dataTmp)
     val lengths = new ArrayBuffer[Long]
     Utils.tryWithSafeFinally {
@@ -100,7 +100,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
   }
 
   private def deleteFileAndTempWithPrefix(prefixPath: Path): Unit = {
-    val fs = prefixPath.getFileSystem(new Configuration)
+    val fs = prefixPath.getFileSystem(new Configuration(false))
     val parentDir = prefixPath.getParent
     val iter = fs.listFiles(parentDir, false)
     while (iter.hasNext) {

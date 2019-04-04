@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver;
+import org.apache.spark.shuffle.remote.RemoteShuffleManager;
 import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
 import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
 import org.apache.spark.shuffle.sort.SortShuffleManager;
@@ -246,7 +247,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final long[] partitionLengths;
     final Path output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
     final Path tmp = RemoteShuffleUtils.tempPathWith(output);
-    FileSystem fs = output.getFileSystem(new Configuration());
+    FileSystem fs = RemoteShuffleManager.getFileSystem();
     try {
       try {
         partitionLengths = mergeSpills(spills, tmp);
@@ -297,7 +298,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    * @return the partition lengths in the merged file.
    */
   private long[] mergeSpills(RemoteSpillInfo[] spills, Path outputFile) throws IOException {
-    final FileSystem fs = outputFile.getFileSystem(new Configuration());
+    final FileSystem fs = RemoteShuffleManager.getFileSystem();
     final boolean compressionEnabled = sparkConf.getBoolean("spark.shuffle.compress", true);
     final CompressionCodec compressionCodec = CompressionCodec$.MODULE$.createCodec(sparkConf);
     final boolean fastMergeEnabled =
@@ -379,7 +380,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       Path outputFile,
       @Nullable CompressionCodec compressionCodec) throws IOException {
     assert (spills.length >= 2);
-    final FileSystem fs = spills[0].file.getFileSystem(new Configuration());
+    final FileSystem fs = RemoteShuffleManager.getFileSystem();
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final InputStream[] spillInputStreams = new InputStream[spills.length];
@@ -452,7 +453,7 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
    */
   private long[] mergeSpillsWithTransferTo(RemoteSpillInfo[] spills, Path outputFile) throws IOException {
     assert (spills.length >= 2);
-    final FileSystem fs = spills[0].file.getFileSystem(new Configuration());
+    final FileSystem fs = RemoteShuffleManager.getFileSystem();
     final int numPartitions = partitioner.numPartitions();
     final long[] partitionLengths = new long[numPartitions];
     final InputStream[] spillInputStreams = new InputStream[spills.length];

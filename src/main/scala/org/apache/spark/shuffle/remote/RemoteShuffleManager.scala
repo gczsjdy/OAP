@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.remote
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -139,19 +140,25 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
 
 private[spark] object RemoteShuffleManager extends Logging {
 
-  private var _active: RemoteShuffleManager = _
+  private var active: RemoteShuffleManager = _
+  def setActive(update: RemoteShuffleManager): Unit = active = update
 
-  def setActive(update: RemoteShuffleManager): Unit = _active = update
-
-  lazy val getHadoopConf = {
-    require(_active != null, "Active RemoteShuffleManager unassigned! It's probably never newed")
+  private[remote] lazy val getHadoopConf = {
+    require(active != null,
+      "Active RemoteShuffleManager unassigned! It's probably never constructed")
     // Remote shuffling deals with the disaggregated computing and storage architecture, so that the
     // configuration of storage cluster cannot be locally loaded to executors. This is why we use
     // false here.
     // Note by Chenzhao: We need to load default HDFS configuration of the remote storage cluster
     val hadoopConf = new Configuration(false)
-    (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(_active.conf, hadoopConf)
+    (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(active.conf, hadoopConf)
     hadoopConf
+  }
+
+  def getFileSystem : FileSystem = {
+    require(active != null,
+      "Active RemoteShuffleManager unassigned! It's probably never constructed")
+    active.shuffleBlockResolver.fs
   }
 
   /**
@@ -164,12 +171,12 @@ private[spark] object RemoteShuffleManager extends Logging {
 
   def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
     val bypassMergeThreshold = conf.get(RemoteShuffleConf.REMOTE_BYPASS_MERGE_THRESHOLD)
-    shouldBypassMergeSort(bypassMergeThreshold, dep) &&
+    remoteShuffleShouldBypassMergeSort(bypassMergeThreshold, dep) &&
       SortShuffleWriter.shouldBypassMergeSort(conf, dep)
   }
 
-  private def shouldBypassMergeSort(remoteBypassThreshold: Int, dep: ShuffleDependency[_, _, _])
-  : Boolean = {
+  private def remoteShuffleShouldBypassMergeSort(
+      remoteBypassThreshold: Int, dep: ShuffleDependency[_, _, _]): Boolean = {
     // HDFS poorly handles large number of small files, so in remote shuffle, we decide using
     // bypass-merge shuffle by compared numMappers * numReducers with the threshold
     dep.rdd.partitions.length * dep.partitioner.numPartitions < remoteBypassThreshold

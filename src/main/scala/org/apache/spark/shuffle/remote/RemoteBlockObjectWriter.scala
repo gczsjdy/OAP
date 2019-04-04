@@ -19,7 +19,6 @@ package org.apache.spark.shuffle.remote
 
 import java.io.{BufferedOutputStream, OutputStream}
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
@@ -64,6 +63,8 @@ private[spark] class RemoteBlockObjectWriter(
     val blockId: BlockId = null)
     extends OutputStream
         with Logging {
+
+  private lazy val fs = RemoteShuffleManager.getFileSystem
 
   /**
     * Guards against close calls, e.g. from a wrapping stream.
@@ -116,8 +117,6 @@ private[spark] class RemoteBlockObjectWriter(
   private var numRecordsWritten = 0
 
   private def initialize(): Unit = {
-    // Is this right?
-    val fs = file.getFileSystem(new Configuration)
     fsdos = fs.create(file)
     ts = new TimeTrackingOutputStream(writeMetrics, fsdos)
     class ManualCloseBufferedOutputStream
@@ -231,7 +230,6 @@ private[spark] class RemoteBlockObjectWriter(
     } {
       var truncateStream: FSDataOutputStream = null
       try {
-        val fs = file.getFileSystem(new Configuration)
         fs.truncate(file, committedPosition)
       } catch {
         case e: Exception =>

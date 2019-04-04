@@ -16,18 +16,17 @@
  */
 package org.apache.spark.shuffle.remote
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
-import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.scalatest.BeforeAndAfterEach
 
 class RemoteBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   var shuffleManager: RemoteShuffleManager = _
 
-  lazy val fs = createWriter()._2.getFileSystem(new Configuration)
+  private lazy val fs = shuffleManager.shuffleBlockResolver.fs
 
   override def beforeEach(): Unit = {
     super.beforeEach()

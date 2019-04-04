@@ -327,7 +327,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
     }
     FileSystem fs = null;
     if (!spills.isEmpty()) {
-      fs = spills.get(0).file.getFileSystem(new Configuration());
+      fs = RemoteShuffleManager.getFileSystem();
     }
     for (RemoteSpillInfo spill : spills) {
       if (fs.exists(spill.file) && !fs.delete(spill.file, true)) {
