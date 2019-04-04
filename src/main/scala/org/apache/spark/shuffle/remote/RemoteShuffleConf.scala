@@ -16,6 +16,13 @@ object RemoteShuffleConf {
         .stringConf
         .createWithDefault("/shuffle")
 
+  val DFS_REPLICATION: ConfigEntry[Int] =
+    ConfigBuilder("spark.shuffle.remote.dfsReplication")
+        .doc("The default replication of remote storage system, will override dfs.replication" +
+            " when HDFS is used as shuffling storage")
+        .intConf
+        .createWithDefault(3)
+
   val REMOTE_OPTIMIZED_SHUFFLE_ENABLED: ConfigEntry[Boolean] =
     ConfigBuilder("spark.shuffle.remote.optimizedPathEnabled")
         .doc("Enable using unsafe-optimized shuffle writer")

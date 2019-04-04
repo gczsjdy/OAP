@@ -152,7 +152,13 @@ private[spark] object RemoteShuffleManager extends Logging {
     // Note by Chenzhao: We need to load default HDFS configuration of the remote storage cluster
     val hadoopConf = new Configuration(false)
     (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(active.conf, hadoopConf)
+    appendRemoteStorageHadoopConfigurations(active.conf, hadoopConf)
     hadoopConf
+  }
+
+  private def appendRemoteStorageHadoopConfigurations(
+      sparkConf: SparkConf, hadoopConf: Configuration) = {
+    hadoopConf.set("dfs.replication", sparkConf.get(RemoteShuffleConf.DFS_REPLICATION).toString)
   }
 
   def getFileSystem : FileSystem = {
