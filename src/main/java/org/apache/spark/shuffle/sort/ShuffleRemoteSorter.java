@@ -21,7 +21,6 @@ import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.LinkedList;
 
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.SparkEnv;
@@ -68,11 +67,11 @@ import org.apache.spark.util.Utils;
  * spill files. Instead, this merging is performed in {@link UnsafeShuffleWriter}, which uses a
  * specialized merge procedure that avoids extra serialization/deserialization.
  */
-final class RemoteShuffleExternalSorter extends MemoryConsumer {
+final class ShuffleRemoteSorter extends MemoryConsumer {
 
   private SerializerManager serializerManager = SparkEnv.get().serializerManager();
 
-  private static final Logger logger = LoggerFactory.getLogger(RemoteShuffleExternalSorter.class);
+  private static final Logger logger = LoggerFactory.getLogger(ShuffleRemoteSorter.class);
 
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
@@ -113,7 +112,7 @@ final class RemoteShuffleExternalSorter extends MemoryConsumer {
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
 
-  RemoteShuffleExternalSorter(
+  ShuffleRemoteSorter(
       TaskMemoryManager memoryManager,
       BlockManager blockManager,
       TaskContext taskContext,
