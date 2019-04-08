@@ -24,7 +24,7 @@ import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 import org.apache.spark.storage.RemoteShuffleBlockIterator
 import org.apache.spark.util.CompletionIterator
-import org.apache.spark.util.collection.ExternalSorter
+import org.apache.spark.util.collection.RemoteSorter
 
 /**
   * Fetches and reads the partitions in range [startPartition, endPartition) from a shuffle by
@@ -97,8 +97,8 @@ private[spark] class RemoteShuffleReader[K, C](
     val resultIter = dep.keyOrdering match {
       case Some(keyOrd: Ordering[K]) =>
         // Create an ExternalSorter to sort the data.
-        val sorter =
-          new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
+        val sorter = new RemoteSorter[K, C, C](
+          context, resolver, ordering = Some(keyOrd), serializer = dep.serializer)
         sorter.insertAll(aggregatedIter)
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
