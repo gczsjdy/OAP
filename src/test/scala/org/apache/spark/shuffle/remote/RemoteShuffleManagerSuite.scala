@@ -20,6 +20,17 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
         == false)
   }
 
+  test("Remote shuffle and external shuffle service cannot be enabled at the same time") {
+    intercept[Exception] {
+      sc = new SparkContext(
+        "local",
+        "test",
+        new SparkConf(true)
+            .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+            .set("spark.shuffle.service.enabled", "true"))
+    }
+  }
+
   // Optimized shuffle writer & non-optimized shuffle writer
   private def testWithMultiplePath(name: String, loadDefaults: Boolean = true)
       (body: (SparkConf => Unit)): Unit = {

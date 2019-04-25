@@ -26,6 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.sort._
+import org.apache.spark.internal.config
 
 /**
   * In remote shuffle, data is written to a remote Hadoop compatible file system instead of local
@@ -33,6 +34,11 @@ import org.apache.spark.shuffle.sort._
   */
 private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends ShuffleManager with
     Logging {
+
+  require(conf.get(
+    config.SHUFFLE_SERVICE_ENABLED.key, config.SHUFFLE_SERVICE_ENABLED.defaultValueString)
+      == "false", "Remote shuffle and external shuffle service: they cannot be enabled at the" +
+      " same time")
 
   RemoteShuffleManager.setActive(this)
 
