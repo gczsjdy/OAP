@@ -32,6 +32,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
 import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.shuffle.remote.RemoteShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.storage._
 import org.apache.spark.util._
@@ -1731,7 +1732,12 @@ private[spark] class DAGScheduler(
     // if the cluster manager explicitly tells us that the entire worker was lost, then
     // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
     // from a Standalone cluster, where the shuffle service lives in the Worker.)
-    val fileLost = workerLost || !env.blockManager.externalShuffleServiceEnabled
+    val remoteShuffleClass = classOf[RemoteShuffleManager].getName
+    val remoteShuffleEnabled = env.conf.get("spark.shuffle.manager") == remoteShuffleClass
+    // If remote shuffle is enabled, shuffle files will be taken care of by remote storage, the
+    // unregistering and rerun of certain tasks are not needed.
+    val fileLost =
+      !remoteShuffleEnabled && (workerLost || !env.blockManager.externalShuffleServiceEnabled)
     removeExecutorAndUnregisterOutputs(
       execId = execId,
       fileLost = fileLost,
