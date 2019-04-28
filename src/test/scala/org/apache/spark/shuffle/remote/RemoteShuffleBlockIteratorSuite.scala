@@ -5,7 +5,7 @@ import java.io.InputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark._
-import org.apache.spark.storage.{BlockId, RemoteShuffleBlockIterator, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, RemoteShuffleBlockIterator, ShuffleBlockId}
 import org.apache.spark.util.Utils
 
 import scala.collection.mutable.ArrayBuffer
@@ -62,14 +62,18 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     val blockInfos = for (i <- 0 until numMaps; j <- startPartition until endPartition) yield {
       (ShuffleBlockId(shuffleId, i, j), 1L)
     }
+    val blocksByAddress = Seq((BlockManagerId("0", "0", 6), blockInfos))
 
     val iter = new RemoteShuffleBlockIterator(
-      TaskContext.get(),
+      TaskContext.empty(),
+      null,
       resolver,
-      blockInfos.toIterator,
+      blocksByAddress.toIterator,
       (_: BlockId, input: InputStream) => input,
       48 * 1024 * 1024,
-      Int.MaxValue)
+      Int.MaxValue,
+      Int.MaxValue,
+      conf)
 
     val expected =
       expectPart0 ++ expectPart1 ++ expectPart2 ++ expectPart3 ++ expectPart4 ++ expectPart5

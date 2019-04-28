@@ -25,14 +25,14 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver
-import org.apache.spark.storage.ShuffleBlockFetcherIterator.FetchRequest
+import org.apache.spark.shuffle.remote.{RemoteShuffleBlockResolver, RemoteShuffleConf}
+import org.apache.spark.storage.ShuffleBlockFetcherIterator.{FetchRequest, SuccessFetchResult}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -49,7 +49,7 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param context [[TaskContext]], used for metrics update
  * @param shuffleClient [[ShuffleClient]] for fetching remote blocks
  * @param blockManager [[BlockManager]] for reading local blocks
- * @param blockInfos list of blocks to fetch grouped by the [[BlockManagerId]].
+ * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage. Note that zero-sized blocks are
  *                        already excluded, which happened in
@@ -65,18 +65,30 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 private[spark]
 final class RemoteShuffleBlockIterator(
     context: TaskContext,
+    shuffleClient: ShuffleClient,
     resolver: RemoteShuffleBlockResolver,
-    blockInfos: Iterator[(BlockId, Long)],
+    blocksByAddress: Iterator[(BlockManagerId, Seq[(BlockId, Long)])],
     streamWrapper: (BlockId, InputStream) => InputStream,
     maxBytesInFlight: Long,
-    maxReqsInFlight: Int)
+    maxReqsInFlight: Int,
+    maxBlocksInFlightPerAddress: Int,
+    conf: SparkConf)
   extends Iterator[(BlockId, InputStream)] with Logging {
 
   import RemoteShuffleBlockIterator._
 
+  private val indexCacheEnabled: Boolean = {
+    val size = conf.get(RemoteShuffleConf.REMOTE_INDEX_CACHE_SIZE)
+    (size > 0) && !conf.getBoolean("spark.dynamicAllocation.enabled", false)
+  }
+
+  if (indexCacheEnabled) {
+    logWarning("Fetching index files from the cache of executors which wrote them")
+  }
+
   /**
    * Total number of blocks to fetch. This should be equal to the total number of blocks
-   * in [[blockInfos]] because we already filter out zero-sized blocks in [[blockInfos]].
+   * in [[blocksByAddress]] because we already filter out zero-sized blocks in [[blocksByAddress]].
    *
    * This should equal localBlocks.size + remoteBlocks.size.
    */
@@ -111,17 +123,18 @@ final class RemoteShuffleBlockIterator(
    */
   private[this] val fetchRequests = new Queue[RemoteFetchRequest]
 
-  /**
-   * Queue of fetch requests which could not be issued the first time they were dequeued. These
-   * requests are tried again when the fetch constraints are satisfied.
-   */
-  private[this] val deferredFetchRequests = Queue[RemoteFetchRequest]()
-
   /** Current bytes in flight from our requests */
   private[this] var bytesInFlight = 0L
 
   /** Current number of requests in flight */
   private[this] var reqsInFlight = 0
+
+  /**
+    * Whether the iterator is still active. If isZombie is true, the callback interface will no
+    * longer place fetched blocks into [[results]].
+    */
+  @GuardedBy("this")
+  private[this] var isZombie = false
 
   initialize()
 
@@ -135,22 +148,44 @@ final class RemoteShuffleBlockIterator(
     currentResult = null
   }
 
+  /**
+    * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
+    */
+  private[this] def cleanup() {
+    synchronized {
+      isZombie = true
+    }
+    releaseCurrentResultBuffer()
+    // Release buffers in the results queue
+    val iter = results.iterator()
+    while (iter.hasNext) {
+      val result = iter.next()
+      result match {
+        case SuccessRemoteFetchResult(_, buf) =>
+          buf.release()
+        case _ =>
+      }
+    }
+  }
+
   private[this] def sendRequest(req: RemoteFetchRequest) {
-    bytesInFlight += req.size
     reqsInFlight += 1
 
     // so we can look up the size of each blockID
     val blockIds = req.blocks.map(_._1)
+    val address = req.address
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
         // Only add the buffer to results queue if the iterator is not zombie,
         // i.e. cleanup() has not been called yet.
         RemoteShuffleBlockIterator.this.synchronized {
-          // Increment the ref count because we need to pass this to a different thread.
-          // This needs to be released after use.
-          buf.retain()
-          results.put(new SuccessRemoteFetchResult(BlockId(blockId), buf))
+          if (!isZombie) {
+            // Increment the ref count because we need to pass this to a different thread.
+            // This needs to be released after use.
+            buf.retain()
+            results.put(new SuccessRemoteFetchResult(BlockId(blockId), buf))
+          }
         }
       }
 
@@ -159,8 +194,13 @@ final class RemoteShuffleBlockIterator(
         results.put(new FailureRemoteFetchResult(BlockId(blockId), e))
       }
     }
-
-    fetchBlocks(blockIds.toArray, blockFetchingListener)
+    if (indexCacheEnabled) {
+      shuffleClient.fetchBlocks(
+        address.host, address.port, address.executorId, blockIds.map(_.toString()).toArray,
+        blockFetchingListener, null)
+    } else {
+      fetchBlocks(blockIds.toArray, blockFetchingListener)
+    }
   }
 
   private def fetchBlocks(
@@ -177,25 +217,74 @@ final class RemoteShuffleBlockIterator(
     }
   }
 
-  // For remote shuffling, all blocks are remote
+  // For remote shuffling, all blocks are remote, so this actually resembles RemoteFetchRequests
   private[this] def splitLocalRemoteBlocks(): ArrayBuffer[RemoteFetchRequest] = {
 
     // Split local and remote blocks. Remote blocks are further split into FetchRequests of size
     // at most maxBytesInFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[RemoteFetchRequest]
 
-    // Each request contains the ShuffleBlocks from the same mapper
-    blockInfos.toArray.groupBy(_._1.asInstanceOf[ShuffleBlockId].mapId).foreach {
-      case (_, blockInfos) =>
-        remoteRequests += new RemoteFetchRequest(blockInfos)
-        numBlocksToFetch += blockInfos.length
+    if (indexCacheEnabled) {
+      for ((address, blockInfos) <- blocksByAddress) {
+        val iterator = blockInfos.iterator
+        var curRequestSize = 0L
+        var curBlocks = new ArrayBuffer[(BlockId, Long)]
+        while (iterator.hasNext) {
+          val (blockId, size) = iterator.next()
+          if (size < 0) {
+            throw new BlockException(blockId, "Negative block size " + size)
+          } else if (size == 0) {
+            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
+          } else {
+            curBlocks += ((blockId, size))
+            remoteBlocks += blockId
+            numBlocksToFetch += 1
+            curRequestSize += size
+          }
+          // We only care about the amount of requests, but not the total content size of blocks, due
+          // to during this fetch process we only get a range(offset and length) for each block. The
+          // block content will not be transferred through netty, while it's read from a
+          // globally-accessible Hadoop compatible file system
+          if (curBlocks.size >= maxBlocksInFlightPerAddress) {
+            // Add this FetchRequest
+            remoteRequests += new RemoteFetchRequest(address, curBlocks)
+            logDebug(s"Creating fetch request of $curRequestSize at $address "
+                + s"with ${curBlocks.size} blocks")
+            curBlocks = new ArrayBuffer[(BlockId, Long)]
+            curRequestSize = 0
+          }
+        }
+        // Add in the final request
+        if (curBlocks.nonEmpty) {
+          remoteRequests += new RemoteFetchRequest(address, curBlocks)
+        }
+      }
+      logInfo(s"Getting $numBlocksToFetch non-empty blocks including ${remoteBlocks.size}" +
+          s" remote blocks")
+    } else {
+      // Each request contains the ShuffleBlocks from the same mapper
+      def cartesianProduct(blockInfo: (BlockManagerId, Seq[(BlockId, Long)])):
+      Seq[(BlockManagerId, (BlockId, Long))] = {
+        val (left, right) = blockInfo
+        for (each <- right) yield (left, (each._1, each._2))
+      }
+      // Each request contains the ShuffleBlocks from the same mapper
+      blocksByAddress.flatMap(cartesianProduct).toArray
+          .groupBy(_._2._1.asInstanceOf[ShuffleBlockId].mapId).foreach {
+        case (_, blockInfos) =>
+          remoteRequests += new RemoteFetchRequest(blockInfos(0)._1, blockInfos.map(_._2))
+          numBlocksToFetch += blockInfos.length
+      }
     }
     remoteRequests
   }
 
   private[this] def initialize(): Unit = {
+    // Add a task completion callback (called in both success case and failure case) to cleanup.
+    context.addTaskCompletionListener[Unit](_ => cleanup())
 
-    // Split local and remote blocks.
+    // Split local and remote blocks. Actually it assembles remote fetch requests due to all blocks
+    // are remote under remote shuffle
     val remoteRequests = splitLocalRemoteBlocks()
     // Add the remote requests into our queue in a random order
     fetchRequests ++= Utils.randomize(remoteRequests)
@@ -258,35 +347,16 @@ final class RemoteShuffleBlockIterator(
       fetchUpToMaxBytes()
     }
 
-    (result.blockId, input)
+    currentResult = result.asInstanceOf[SuccessRemoteFetchResult]
+    (currentResult.blockId, new RemoteBufferReleasingInputStream(input, this))
   }
 
   private def fetchUpToMaxBytes(): Unit = {
-    // Send fetch requests up to maxBytesInFlight. If you cannot fetch from a remote host
-    // immediately, defer the request until the next time it can be processed.
-
-    // Process any outstanding deferred fetch requests if possible.
-    if (deferredFetchRequests.nonEmpty) {
-      while (isRemoteBlockFetchable(deferredFetchRequests)) {
-        val request = deferredFetchRequests.dequeue()
-        logDebug(s"Processing deferred fetch request with ${request.blocks.length} blocks")
-        sendRequest(request)
-      }
-    }
-
     // Process any regular fetch requests if possible.
-    while (isRemoteBlockFetchable(fetchRequests)) {
+    while (fetchRequests.nonEmpty) {
       val request = fetchRequests.dequeue()
       sendRequest(request)
     }
-
-    def isRemoteBlockFetchable(fetchReqQueue: Queue[RemoteFetchRequest]): Boolean = {
-      fetchReqQueue.nonEmpty && true
-//        (bytesInFlight == 0 ||
-//          (reqsInFlight + 1 <= maxReqsInFlight &&
-//            bytesInFlight + fetchReqQueue.front.size <= maxBytesInFlight))
-    }
-
   }
 
   private def throwDetailedException(blockId: ShuffleBlockId, e: Throwable) = {
@@ -341,9 +411,7 @@ object RemoteShuffleBlockIterator {
    * @param blocks Sequence of tuple, where the first element is the block id,
    *               and the second element is the estimated size, used to calculate bytesInFlight.
    */
-  case class RemoteFetchRequest(blocks: Seq[(BlockId, Long)]) {
-    val size = blocks.map(_._2).sum
-  }
+  case class RemoteFetchRequest(address: BlockManagerId, blocks: Seq[(BlockId, Long)])
 
   /**
    * Result of a fetch from a remote block.

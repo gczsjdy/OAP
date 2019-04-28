@@ -5,10 +5,12 @@ import java.nio.ByteBuffer
 import java.util.UUID
 
 import com.google.common.io.ByteStreams
+import io.netty.buffer.{ByteBuf, Unpooled}
 import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.protocol.{Encodable, Encoders}
 import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 import org.apache.spark.shuffle.ShuffleBlockResolver
 import org.apache.spark.storage.{ShuffleBlockId, TempLocalBlockId, TempShuffleBlockId}
@@ -226,69 +228,4 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     val dir = new Path(dirPrefix)
     fs.delete(dir, true)
   }
-}
-
-/**
-  * Something like [[org.apache.spark.network.buffer.FileSegmentManagedBuffer]], instead we only
-  * need createInputStream function, so we don't need a TransportConf field, which is intended to
-  * be used in other functions
-  */
-private[remote] class HadoopFileSegmentManagedBuffer(
-    private val file: Path, private val offset: Long, private val length: Long)
-    extends ManagedBuffer {
-
-  import HadoopFileSegmentManagedBuffer.fs
-
-  override def size(): Long = length
-
-  override def nioByteBuffer(): ByteBuffer = ???
-
-  override def createInputStream(): InputStream = {
-
-    if (length == 0) {
-      new ByteArrayInputStream(new Array[Byte](0))
-    } else {
-      var is: InputStream = null
-      var shouldClose = true
-
-      try {
-        is = fs.open(file)
-        ByteStreams.skipFully(is, offset)
-        val r = new LimitedInputStream(is, length)
-        shouldClose = false
-        r
-      } catch {
-        case e: IOException =>
-          var errorMessage = "Error in reading " + this
-          if (is != null) {
-            val size = fs.getFileStatus(file).getLen
-            errorMessage = "Error in reading " + this + " (actual file length " + size + ")"
-          }
-          throw new IOException(errorMessage, e)
-      } finally {
-        if (shouldClose)
-          JavaUtils.closeQuietly(is)
-      }
-    }
-
-  }
-
-  override def equals(obj: Any): Boolean = {
-    if (! obj.isInstanceOf[HadoopFileSegmentManagedBuffer]) {
-      false
-    } else {
-      val buffer = obj.asInstanceOf[HadoopFileSegmentManagedBuffer]
-      this.file == buffer.file && this.offset == buffer.offset && this.length == buffer.length
-    }
-  }
-
-  override def retain(): ManagedBuffer = this
-
-  override def release(): ManagedBuffer = this
-
-  override def convertToNetty(): AnyRef = ???
-}
-
-private[remote] object HadoopFileSegmentManagedBuffer {
-  private val fs = RemoteShuffleManager.getFileSystem
 }

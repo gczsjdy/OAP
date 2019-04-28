@@ -43,6 +43,9 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     test(name + " with bypass-merge-sort shuffle path") {
       body(createSparkConf(loadDefaults, bypassMergeSort = true, unsafeOptimized = false))
     }
+    test(name + " with index files fetching from the executors which wrote them") {
+      body(createSparkConf(loadDefaults, bypassMergeSort = true, unsafeOptimized = false, indexCache = true))
+    }
   }
 
   private def repartition(conf: SparkConf): Unit = {
@@ -70,7 +73,8 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   private def createSparkConf(
-      loadDefaults: Boolean, bypassMergeSort: Boolean, unsafeOptimized: Boolean = true): SparkConf
+      loadDefaults: Boolean, bypassMergeSort: Boolean, unsafeOptimized: Boolean = true,
+      indexCache: Boolean = false): SparkConf
     = {
     val smallThreshold = 1
     val largeThreshold = 50
@@ -82,6 +86,9 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     if (bypassMergeSort) {
       // Use a loose threshold
       conf.set("spark.shuffle.sort.bypassMergeThreshold", largeThreshold.toString)
+    }
+    if (indexCache) {
+      conf.set("spark.shuffle.remote.index.cache.size", "3")
     }
     conf
   }
