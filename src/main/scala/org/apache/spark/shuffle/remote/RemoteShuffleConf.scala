@@ -40,14 +40,14 @@ object RemoteShuffleConf {
         .intConf
         .createWithDefault(300)
 
-  val REMOTE_INDEX_CACHE_SIZE: ConfigEntry[Int] =
+  val REMOTE_INDEX_CACHE_SIZE: ConfigEntry[String] =
     ConfigBuilder("spark.shuffle.remote.index.cache.size")
         .doc("This index file cache resides in each executor. If it's a positive value, index " +
             "cache will be turned on: instead of reading index files directly from remote storage" +
             ", a reducer will fetch the index files from the executors that write them through" +
             " network. And those executors will return the index files kept in cache. (read them" +
             "from storage if needed)")
-        .intConf
-        .createWithDefault(0)
+        .stringConf
+        .createWithDefault("0")
 
 }

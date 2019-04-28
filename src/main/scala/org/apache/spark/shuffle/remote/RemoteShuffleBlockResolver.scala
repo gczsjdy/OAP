@@ -4,14 +4,13 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.UUID
 
-import com.google.common.io.ByteStreams
-import io.netty.buffer.{ByteBuf, Unpooled}
-import org.apache.hadoop.fs.Path
+import com.google.common.cache.{CacheBuilder, CacheLoader, Weigher}
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.protocol.{Encodable, Encoders}
-import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
+import org.apache.spark.network.shuffle.ShuffleIndexRecord
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.shuffle.ShuffleBlockResolver
 import org.apache.spark.storage.{ShuffleBlockId, TempLocalBlockId, TempShuffleBlockId}
 import org.apache.spark.util.Utils
@@ -39,6 +38,41 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   // This referenced is shared for all the I/Os with shuffling storage system
   lazy val fs = new Path(dirPrefix).getFileSystem(RemoteShuffleManager.getHadoopConf)
+
+  private[remote] val indexCacheEnabled: Boolean = {
+    val size = JavaUtils.byteStringAsBytes(conf.get(RemoteShuffleConf.REMOTE_INDEX_CACHE_SIZE))
+    val dynamicAllocationEnabled =
+      conf.getBoolean("spark.dynamicAllocation.enabled", false)
+    (size > 0) && {
+      if (dynamicAllocationEnabled) {
+        logWarning("Index cache is not enabled due to dynamic allocation is enabled, the" +
+            " cache in executors may get removed. ")
+      }
+      !dynamicAllocationEnabled
+    }
+  }
+
+  if (indexCacheEnabled) {
+    logWarning("Fetching index files from the cache of executors which wrote them")
+  }
+
+  // These 3 fields will only be initialized when index cache enabled
+  lazy val indexCacheSize: String =
+    conf.get("spark.shuffle.remote.index.cache.size", "30m")
+
+  lazy val indexCacheLoader: CacheLoader[Path, RemoteShuffleIndexInfo] =
+    new CacheLoader[Path, RemoteShuffleIndexInfo]() {
+      override def load(file: Path)= new RemoteShuffleIndexInfo(file)
+  }
+
+  lazy val shuffleIndexCache =
+    CacheBuilder.newBuilder
+        .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
+        .weigher(new Weigher[Path, RemoteShuffleIndexInfo]() {
+          override def weigh(file: Path, indexInfo: RemoteShuffleIndexInfo): Int =
+            indexInfo.getSize
+        })
+        .build(indexCacheLoader)
 
 /**
   * Something like [[org.apache.spark.storage.DiskBlockManager.getFile()]]
@@ -171,30 +205,39 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
 
-    // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
-    // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
-    // (which may cause a reducer to be sent a different reducer's data). The explicit position
-    // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
-    // class of issue from re-occurring in the future which is why they are left here even though
-    // SPARK-22982 is fixed.
-    val in = fs.open(indexFile)
-    in.seek(blockId.reduceId * 8L)
-    try {
-      val offset = in.readLong()
-      val nextOffset = in.readLong()
-      val actualPosition = in.getPos()
-      val expectedPosition = blockId.reduceId * 8L + 16
-      if (actualPosition != expectedPosition) {
-        throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
-            s"expected $expectedPosition but actual position was $actualPosition.")
+    val (offset, length) =
+      if (indexCacheEnabled) {
+        val shuffleIndexInfo = shuffleIndexCache.get(indexFile)
+        logInfo("Fetching from Guava index cache")
+        val range = shuffleIndexInfo.getIndex(blockId.reduceId)
+        (range.getOffset, range.getLength)
+      } else {
+        // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
+        // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
+        // (which may cause a reducer to be sent a different reducer's data). The explicit position
+        // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
+        // class of issue from re-occurring in the future which is why they are left here even though
+        // SPARK-22982 is fixed.
+        val in = fs.open(indexFile)
+        in.seek(blockId.reduceId * 8L)
+        try {
+          val offset = in.readLong()
+          val nextOffset = in.readLong()
+          val actualPosition = in.getPos()
+          val expectedPosition = blockId.reduceId * 8L + 16
+          if (actualPosition != expectedPosition) {
+            throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
+                s"expected $expectedPosition but actual position was $actualPosition.")
+          }
+          (offset, nextOffset - offset)
+        } finally {
+          in.close()
+        }
       }
-      new HadoopFileSegmentManagedBuffer(
-        getDataFile(blockId.shuffleId, blockId.mapId),
-        offset,
-        nextOffset - offset)
-    } finally {
-      in.close()
-    }
+    new HadoopFileSegmentManagedBuffer(
+      getDataFile(blockId.shuffleId, blockId.mapId),
+      offset,
+      length)
   }
 
   /**
@@ -227,5 +270,34 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   override def stop(): Unit = {
     val dir = new Path(dirPrefix)
     fs.delete(dir, true)
+  }
+}
+
+private[remote] class RemoteShuffleIndexInfo(indexFile: Path) {
+
+  private val fs = RemoteShuffleManager.getFileSystem
+
+  private val size = fs.getFileStatus(indexFile).getLen
+  private val buffer: ByteBuffer = ByteBuffer.allocate(size.toInt)
+  private val offsets = buffer.asLongBuffer
+  private var input: FSDataInputStream = _
+  try {
+    input = fs.open(indexFile)
+    input.readFully(buffer.array)
+  } finally {
+    if (input != null) {
+      input.close()
+    }
+  }
+
+  def getSize: Int = size.toInt
+
+  /**
+    * Get index offset for a particular reducer.
+    */
+  def getIndex(reduceId: Int): ShuffleIndexRecord = {
+    val offset = offsets.get(reduceId)
+    val nextOffset = offsets.get(reduceId + 1)
+    new ShuffleIndexRecord(offset, nextOffset - offset)
   }
 }

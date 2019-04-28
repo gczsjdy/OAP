@@ -88,7 +88,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
       conf.set("spark.shuffle.sort.bypassMergeThreshold", largeThreshold.toString)
     }
     if (indexCache) {
-      conf.set("spark.shuffle.remote.index.cache.size", "3")
+      conf.set("spark.shuffle.remote.index.cache.size", "3m")
     }
     conf
   }

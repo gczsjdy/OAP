@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.shuffle.remote
 
 import java.io.{IOException, InputStream}
 import java.nio.ByteBuffer
@@ -32,7 +32,7 @@ import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.shuffle.remote.{RemoteShuffleBlockResolver, RemoteShuffleConf}
-import org.apache.spark.storage.ShuffleBlockFetcherIterator.{FetchRequest, SuccessFetchResult}
+import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
@@ -77,14 +77,7 @@ final class RemoteShuffleBlockIterator(
 
   import RemoteShuffleBlockIterator._
 
-  private val indexCacheEnabled: Boolean = {
-    val size = conf.get(RemoteShuffleConf.REMOTE_INDEX_CACHE_SIZE)
-    (size > 0) && !conf.getBoolean("spark.dynamicAllocation.enabled", false)
-  }
-
-  if (indexCacheEnabled) {
-    logWarning("Fetching index files from the cache of executors which wrote them")
-  }
+  private val indexCacheEnabled = resolver.indexCacheEnabled
 
   /**
    * Total number of blocks to fetch. This should be equal to the total number of blocks
@@ -140,7 +133,7 @@ final class RemoteShuffleBlockIterator(
 
   // Decrements the buffer reference count.
   // The currentResult is set to null to prevent releasing the buffer again on cleanup()
-  private[storage] def releaseCurrentResultBuffer(): Unit = {
+  private[remote] def releaseCurrentResultBuffer(): Unit = {
     // Release the current buffer if necessary
     if (currentResult != null) {
       currentResult.buf.release()
@@ -402,7 +395,7 @@ private class RemoteBufferReleasingInputStream(
   override def reset(): Unit = delegate.reset()
 }
 
-private[storage]
+private[remote]
 object RemoteShuffleBlockIterator {
 
   /**
@@ -416,7 +409,7 @@ object RemoteShuffleBlockIterator {
   /**
    * Result of a fetch from a remote block.
    */
-  private[storage] sealed trait RemoteFetchResult {
+  private[remote] sealed trait RemoteFetchResult {
     val blockId: BlockId
   }
 
@@ -425,7 +418,7 @@ object RemoteShuffleBlockIterator {
    * @param blockId block id
    * @param buf `ManagedBuffer` for the content.
    */
-  private[storage] case class SuccessRemoteFetchResult(
+  private[remote] case class SuccessRemoteFetchResult(
       blockId: BlockId,
       buf: ManagedBuffer) extends RemoteFetchResult {
     require(buf != null)
@@ -436,7 +429,7 @@ object RemoteShuffleBlockIterator {
    * @param blockId block id
    * @param e the failure exception
    */
-  private[storage] case class FailureRemoteFetchResult(
+  private[remote] case class FailureRemoteFetchResult(
       blockId: BlockId,
       e: Throwable) extends RemoteFetchResult
 }
