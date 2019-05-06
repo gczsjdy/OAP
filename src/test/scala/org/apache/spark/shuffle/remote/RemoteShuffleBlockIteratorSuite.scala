@@ -36,7 +36,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
 
     val shuffleId = 1
 
-    val conf = new SparkConf()
+    val conf = createDefaultConf()
     shuffleManager = new RemoteShuffleManager(conf)
     val resolver = shuffleManager.shuffleBlockResolver
 

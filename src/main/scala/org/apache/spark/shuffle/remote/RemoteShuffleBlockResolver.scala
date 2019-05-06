@@ -16,8 +16,6 @@ import org.apache.spark.storage.{ShuffleBlockId, TempLocalBlockId, TempShuffleBl
 import org.apache.spark.util.Utils
 
 /**
-  * Note by Chenzhao: optimization of index file cache
-  *
   * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
   * It also manages the resource cleaning and temporary files creation,
   * like a [[org.apache.spark.shuffle.IndexShuffleBlockResolver]] ++

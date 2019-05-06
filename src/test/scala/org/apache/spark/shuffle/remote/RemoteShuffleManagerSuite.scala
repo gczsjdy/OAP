@@ -78,7 +78,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     = {
     val smallThreshold = 1
     val largeThreshold = 50
-    val conf = new SparkConf(loadDefaults)
+    val conf = createDefaultConf(loadDefaults)
       .set("spark.shuffle.optimizedPathEnabled", unsafeOptimized.toString)
       .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
       // Use a strict threshold as default so that Bypass-Merge-Sort shuffle writer won't be used

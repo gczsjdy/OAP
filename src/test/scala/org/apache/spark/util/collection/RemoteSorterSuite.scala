@@ -42,21 +42,20 @@ class RemoteSorterSuite extends SparkFunSuite with LocalSparkContext {
    * ============================= */
 
   private def createSparkConf(loadDefaults: Boolean, kryo: Boolean): SparkConf = {
-    val conf = new SparkConf(loadDefaults)
+    val conf = createDefaultConf(loadDefaults)
     if (kryo) {
       conf.set("spark.serializer", classOf[KryoSerializer].getName)
     } else {
       // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
       // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
       conf.set("spark.serializer.objectStreamReset", "1")
-      conf.set("spark.serializer", classOf[JavaSerializer].getName)
+        .set("spark.serializer", classOf[JavaSerializer].getName)
     }
     conf.set("spark.shuffle.sort.bypassMergeThreshold", "0")
     // Ensure that we actually have multiple batches per spill file
-    conf.set("spark.shuffle.spill.batchSize", "10")
-    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
-    conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-    conf
+      .set("spark.shuffle.spill.batchSize", "10")
+      .set("spark.shuffle.spill.initialMemoryThreshold", "512")
+      .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
   }
 
   /**

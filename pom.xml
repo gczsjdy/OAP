@@ -124,7 +124,7 @@
         <configuration>
           <skipTests>true</skipTests>
           <systemProperties>
-            <spark.test.home>${env.WORK_SPARK_HOME}</spark.test.home>
+            <spark.test.home>${env.SPARK_HOME}</spark.test.home>
           </systemProperties>
           <environmentVariables>
             <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>
@@ -139,7 +139,7 @@
           <junitxml>.</junitxml>
           <filereports>WDF TestSuite.txt</filereports>
           <systemProperties>
-            <spark.test.home>${env.WORK_SPARK_HOME}</spark.test.home>
+            <spark.test.home>${env.SPARK_HOME}</spark.test.home>
           </systemProperties>
           <environmentVariables>
             <SPARK_SCALA_VERSION>${scala.binary.version}</SPARK_SCALA_VERSION>

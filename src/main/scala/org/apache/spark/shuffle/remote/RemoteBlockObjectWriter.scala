@@ -188,7 +188,7 @@ private[spark] class RemoteBlockObjectWriter(
       objOut.close()
       streamOpen = false
 
-      /* NOTE by Chenzhao: Right? */
+      /* NOTE by Chenzhao: It doesn't work for local file system */
       if (syncWrites) {
         // Force outstanding writes to disk and track how long it takes
         val start = System.nanoTime()
@@ -228,17 +228,14 @@ private[spark] class RemoteBlockObjectWriter(
         closeResources()
       }
     } {
-      var truncateStream: FSDataOutputStream = null
       try {
+        close()
         fs.truncate(file, committedPosition)
       } catch {
+        case _: UnsupportedOperationException => logInfo("This filesystem doesn't support" +
+            "truncate")
         case e: Exception =>
           logError("Uncaught exception while reverting partial writes to file " + file, e)
-      } finally {
-        if (truncateStream != null) {
-          truncateStream.close()
-          truncateStream = null
-        }
       }
     }
     file

@@ -46,7 +46,7 @@ class RemoteAppendOnlyMapSuite extends SparkFunSuite
   private def mergeCombiners[T](buf1: ArrayBuffer[T], buf2: ArrayBuffer[T]): ArrayBuffer[T] =
     buf1 ++= buf2
 
-  private val resolver = new RemoteShuffleBlockResolver(new SparkConf())
+  private val resolver = new RemoteShuffleBlockResolver(createDefaultConf())
 
   private def createExternalMap[T] = {
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
@@ -55,7 +55,7 @@ class RemoteAppendOnlyMapSuite extends SparkFunSuite
   }
 
   private def createSparkConf(loadDefaults: Boolean, codec: Option[String] = None): SparkConf = {
-    val conf = new SparkConf(loadDefaults)
+    val conf = createDefaultConf(loadDefaults)
     // Make the Java serializer write a reset instruction (TC_RESET) after each object to test
     // for a bug we had with bytes written past the last object in a batch (SPARK-2792)
     conf.set("spark.serializer.objectStreamReset", "1")

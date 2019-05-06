@@ -2,14 +2,14 @@ package org.apache.spark.shuffle.remote
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.storage.ShuffleBlockId
 import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfterEach
 
 class RemoteShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  val conf = new SparkConf()
+  val conf = createDefaultConf()
 
   var dataFile: Path = _
   var indexFile: Path = _
