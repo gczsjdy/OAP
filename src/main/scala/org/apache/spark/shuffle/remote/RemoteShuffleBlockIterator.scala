@@ -79,6 +79,8 @@ final class RemoteShuffleBlockIterator(
 
   private val indexCacheEnabled = resolver.indexCacheEnabled
 
+  private val readMetrics = context.taskMetrics().createTempShuffleReadMetrics()
+
   /**
    * Total number of blocks to fetch. This should be equal to the total number of blocks
    * in [[blocksByAddress]] because we already filter out zero-sized blocks in [[blocksByAddress]].
@@ -317,11 +319,15 @@ final class RemoteShuffleBlockIterator(
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
     while (result == null) {
+      val startFetchWait = System.currentTimeMillis()
       result = results.take()
+      val stopFetchWait = System.currentTimeMillis()
+      readMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
       result match {
         case r @ SuccessRemoteFetchResult(blockId, buf) =>
           val in = try {
+            readMetrics.incRemoteBytesRead(buf.size())
             buf.createInputStream()
           } catch {
             case e: IOException =>

@@ -697,9 +697,9 @@ private[spark] class RemoteSorter[K, V, C](
 
     // Track location of each range in the output file
     val lengths = new Array[Long](numPartitions)
-    val spillMetrics: ShuffleWriteMetrics = new ShuffleWriteMetrics
     val writer = RemoteShuffleUtils.getRemoteWriter(
-      blockId, outputFile, serializerManager, serInstance, fileBufferSize, spillMetrics)
+      blockId, outputFile, serializerManager, serInstance, fileBufferSize,
+      context.taskMetrics().shuffleWriteMetrics)
 
     if (spills.isEmpty) {
       // Case where we only have in-memory data
