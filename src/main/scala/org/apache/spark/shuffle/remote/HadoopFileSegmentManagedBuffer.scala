@@ -26,7 +26,8 @@ private[spark] class HadoopFileSegmentManagedBuffer(
     var is: InputStream = null
     try {
       is = fs.open(file)
-      val array = new Array[Byte]((length - offset).toInt)
+      is.skip(offset)
+      val array = new Array[Byte](length.toInt)
       is.read(array)
       ByteBuffer.wrap(array)
     } finally {
