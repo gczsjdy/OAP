@@ -19,6 +19,8 @@ package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.SparkEnv
+
 import scala.collection.JavaConverters._
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -29,7 +31,8 @@ import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithI
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.shuffle.remote.{HadoopFileSegmentManagedBuffer, MessageForHadoopManagedBuffers}
+import org.apache.spark.shuffle.remote.{HadoopFileSegmentManagedBuffer, MessageForHadoopManagedBuffers, RemoteShuffleManager}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
 
 
@@ -59,7 +62,10 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val blocksNum = openBlocks.blockIds.length
-        if (blocksNum > 0 && BlockId.apply(openBlocks.blockIds(0)).isInstanceOf[ShuffleBlockId]) {
+        if (blocksNum > 0 && BlockId.apply(openBlocks.blockIds(0)).isInstanceOf[ShuffleBlockId] &&
+            SparkEnv.get.conf.get(
+              "spark.shuffle.manager", classOf[SortShuffleManager].getName)
+                == classOf[RemoteShuffleManager].getName) {
           val blockIdAndManagedBufferPair =
             openBlocks.blockIds.map(block => (block, blockManager.getBlockData(
               BlockId.apply(block)).asInstanceOf[HadoopFileSegmentManagedBuffer]))
