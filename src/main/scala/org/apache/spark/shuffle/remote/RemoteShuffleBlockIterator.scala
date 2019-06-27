@@ -31,7 +31,6 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.shuffle.remote.{RemoteShuffleBlockResolver, RemoteShuffleConf}
 import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream

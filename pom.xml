@@ -74,6 +74,12 @@
       <version>2.23.4</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <version>9.4.12.v20180830</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -154,6 +160,18 @@
             <id>test</id>
             <goals>
               <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.0.2</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
             </goals>
           </execution>
         </executions>
