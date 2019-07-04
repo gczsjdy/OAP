@@ -35,7 +35,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   private def dirPrefix = s"$master/$rootDir/$applicationId"
 
   // This referenced is shared for all the I/Os with shuffling storage system
-  lazy val fs = new Path(dirPrefix).getFileSystem(RemoteShuffleManager.getHadoopConf)
+  lazy val fs = new Path(dirPrefix).getFileSystem(RemoteShuffleManager.active.getHadoopConf)
 
   private[remote] val indexCacheEnabled: Boolean = {
     val size = JavaUtils.byteStringAsBytes(conf.get(RemoteShuffleConf.REMOTE_INDEX_CACHE_SIZE))

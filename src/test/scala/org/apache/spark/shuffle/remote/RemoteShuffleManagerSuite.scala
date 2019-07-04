@@ -1,6 +1,8 @@
 package org.apache.spark.shuffle.remote
 
 import org.apache.spark._
+import org.mockserver.integration.ClientAndServer.startClientAndServer
+import org.mockserver.model.{HttpRequest, HttpResponse}
 
 class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -26,8 +28,31 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
         "local",
         "test",
         new SparkConf(true)
-            .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-            .set("spark.shuffle.service.enabled", "true"))
+          .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+          .set("spark.shuffle.service.enabled", "true"))
+    }
+  }
+
+  test("request configuration from remote storage master which is mocked in unit test") {
+    val expectKey = "whatever"
+    val expectVal = "55555"
+    val mockHadoopConf: String = s"<configuration><property><name>$expectKey</name>" +
+      s"<value>$expectVal</value></property></configuration>"
+    val port = 56789
+
+    val mockServer = startClientAndServer(port)
+    mockServer.when(HttpRequest.request.withPath("/conf"))
+      .respond(HttpResponse.response().withBody(mockHadoopConf))
+
+    try {
+      val conf = new SparkConf(false)
+        .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+        .set("spark.shuffle.remote.storageMasterUIPort", port.toString)
+        .set("spark.shuffle.remote.storageMasterUri", "hdfs://localhost:9001")
+      val manager = new RemoteShuffleManager(conf)
+      assert(manager.getHadoopConf.get(expectKey) == expectVal)
+    }finally {
+      mockServer.stop()
     }
   }
 

@@ -4,6 +4,12 @@ import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 
 object RemoteShuffleConf {
 
+  val STORAGE_HDFS_MASTER_UI_PORT: ConfigEntry[String] =
+    ConfigBuilder("spark.shuffle.remote.storageMasterUIPort")
+            .doc("Contact this UI port to retrieve HDFS configurations")
+            .stringConf
+            .createWithDefault("50070")
+
   val STORAGE_MASTER_URI: ConfigEntry[String] =
     ConfigBuilder("spark.shuffle.remote.storageMasterUri")
         .doc("Contact this storage master while persisting shuffle files")
