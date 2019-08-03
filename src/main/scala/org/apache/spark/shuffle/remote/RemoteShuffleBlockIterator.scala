@@ -18,22 +18,17 @@
 package org.apache.spark.shuffle.remote
 
 import java.io.{IOException, InputStream}
-import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
 import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.TransportConf
-import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.Utils
-import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -132,33 +127,12 @@ final class RemoteShuffleBlockIterator(
 
   initialize()
 
-  // Decrements the buffer reference count.
-  // The currentResult is set to null to prevent releasing the buffer again on cleanup()
-  private[remote] def releaseCurrentResultBuffer(): Unit = {
-    // Release the current buffer if necessary
-    if (currentResult != null) {
-      currentResult.buf.release()
-    }
-    currentResult = null
-  }
-
   /**
     * Mark the iterator as zombie, and release all buffers that haven't been deserialized yet.
     */
   private[this] def cleanup() {
     synchronized {
       isZombie = true
-    }
-    releaseCurrentResultBuffer()
-    // Release buffers in the results queue
-    val iter = results.iterator()
-    while (iter.hasNext) {
-      val result = iter.next()
-      result match {
-        case SuccessRemoteFetchResult(_, buf) =>
-          buf.release()
-        case _ =>
-      }
     }
   }
 
@@ -177,7 +151,6 @@ final class RemoteShuffleBlockIterator(
           if (!isZombie) {
             // Increment the ref count because we need to pass this to a different thread.
             // This needs to be released after use.
-            buf.retain()
             results.put(new SuccessRemoteFetchResult(BlockId(blockId), buf))
           }
         }
@@ -275,7 +248,6 @@ final class RemoteShuffleBlockIterator(
 
   private[this] def initialize(): Unit = {
     // Add a task completion callback (called in both success case and failure case) to cleanup.
-    context.addTaskCompletionListener[Unit](_ => cleanup())
 
     // Split local and remote blocks. Actually it assembles remote fetch requests due to all blocks
     // are remote under remote shuffle
@@ -332,7 +304,6 @@ final class RemoteShuffleBlockIterator(
             case e: IOException =>
               // Actually here we know the buf is a HadoopFileSegmentManagedBuffer
               logError("Failed to create input stream from block backed by HDFS file segment", e)
-              buf.release()
               throwDetailedException(blockId.asInstanceOf[ShuffleBlockId], e)
           }
           input = streamWrapper(blockId, in)
@@ -380,7 +351,6 @@ private class RemoteBufferReleasingInputStream(
   override def close(): Unit = {
     if (!closed) {
       delegate.close()
-      iterator.releaseCurrentResultBuffer()
       closed = true
     }
   }
