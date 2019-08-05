@@ -140,12 +140,16 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
   }
 
   private[spark] val getHadoopConf = {
-    val hadoopConf = new Configuration(false)
+    val storageMasterUri = active.conf.get("spark.shuffle.remote.storageMasterUri")
 
+    val hadoopConf = if (storageMasterUri.startsWith("daos")) {
+      new Configuration(true)
+    } else {
+      new Configuration(false)
+    }
     // Hadoop configuration will be loaded remotely if the shuffle storage system is HDFS, due to
     // we assume there may not be a local storage, and there can be useful HDFS client-related
     // configuration needed here
-    val storageMasterUri = active.conf.get("spark.shuffle.remote.storageMasterUri")
     if (storageMasterUri.startsWith("hdfs")) {
       val host = storageMasterUri.split("//")(1).split(":")(0)
       val port = active.conf.get("spark.shuffle.remote.storageMasterUIPort")
