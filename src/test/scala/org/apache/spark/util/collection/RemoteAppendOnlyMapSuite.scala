@@ -17,18 +17,20 @@
 
 package org.apache.spark.util.collection
 
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.ref.WeakReference
+
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually
+
 import org.apache.spark._
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver
 import org.apache.spark.util.CompletionIterator
-import org.scalatest.Matchers
-import org.scalatest.concurrent.Eventually
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
-import scala.ref.WeakReference
 
 /**
   * TODO: Why will this UT leave uncleaned files after testing?
@@ -368,7 +370,8 @@ class RemoteAppendOnlyMapSuite extends SparkFunSuite
     sc = new SparkContext("local-cluster[1,1,1024]", "test", conf)
     val context = MemoryTestingUtils.fakeTaskContext(sc.env)
     val map =
-      new RemoteAppendOnlyMap[FixedHashObject, Int, Int](_ => 1, _ + _, _ + _, resolver = resolver, context = context)
+      new RemoteAppendOnlyMap[FixedHashObject, Int, Int](_ => 1, _ + _, _ + _,
+        resolver = resolver, context = context)
 
     // Insert 10 copies each of lots of objects whose hash codes are either 0 or 1. This causes
     // problems if the map fails to group together the objects with the same code (SPARK-2043).

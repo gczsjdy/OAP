@@ -19,23 +19,9 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.function.BiFunction
-
-import org.apache.commons.lang3.SerializationUtils
-import org.apache.spark._
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.{Logging, config}
-import org.apache.spark.network.util.JavaUtils
-import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
-import org.apache.spark.rpc.RpcTimeout
-import org.apache.spark.shuffle.remote.RemoteShuffleManager
-import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
-import org.apache.spark.storage._
-import org.apache.spark.util._
 
 import scala.annotation.tailrec
 import scala.collection.Map
@@ -43,6 +29,21 @@ import scala.collection.mutable.{ArrayStack, HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.language.{existentials, postfixOps}
 import scala.util.control.NonFatal
+
+import org.apache.commons.lang3.SerializationUtils
+
+import org.apache.spark._
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData}
+import org.apache.spark.rpc.RpcTimeout
+import org.apache.spark.shuffle.remote.RemoteShuffleManager
+import org.apache.spark.storage._
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.util._
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of

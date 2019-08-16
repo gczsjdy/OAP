@@ -19,11 +19,11 @@ package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.SparkEnv
-
 import scala.collection.JavaConverters._
 import scala.language.existentials
 import scala.reflect.ClassTag
+
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.BlockDataManager
 import org.apache.spark.network.buffer.NioManagedBuffer
@@ -34,8 +34,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.remote.{HadoopFileSegmentManagedBuffer, MessageForHadoopManagedBuffers, RemoteShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
-
-
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.

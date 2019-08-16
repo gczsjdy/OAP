@@ -21,15 +21,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import com.google.common.base.Objects;
-import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import org.apache.spark.network.protocol.Encoders;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.shuffle.remote.HadoopFileSegmentManagedBuffer;
 import org.apache.spark.shuffle.remote.MessageForHadoopManagedBuffers;
-import org.apache.spark.storage.BlockId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

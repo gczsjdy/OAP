@@ -17,22 +17,21 @@
 
 package org.apache.spark.shuffle.sort;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.LinkedList;
 
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.spark.SparkEnv;
-import org.apache.spark.serializer.SerializerManager;
-import org.apache.spark.shuffle.remote.*;
+import javax.annotation.Nullable;
+
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.internal.config.package$;
@@ -42,8 +41,9 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
+import org.apache.spark.serializer.SerializerManager;
+import org.apache.spark.shuffle.remote.*;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
@@ -168,10 +168,10 @@ final class ShuffleRemoteSorter extends MemoryConsumer {
     final ShuffleInMemorySorter.ShuffleSorterIterator sortedRecords =
         inMemSorter.getSortedIterator();
 
-    // Small writes to RemoteBlockObjectWriter will be fairly inefficient. Since there doesn't seem to
-    // be an API to directly transfer bytes from managed memory to the disk writer, we buffer
-    // data through a byte array. This array does not need to be large enough to hold a single
-    // record;
+    // Small writes to RemoteBlockObjectWriter will be fairly inefficient. Since there doesn't
+    // seem to be an API to directly transfer bytes from managed memory to the disk writer,
+    // we buffer data through a byte array. This array does not need to be large enough to
+    // hold a single record;
     final byte[] writeBuffer = new byte[diskWriteBufferSize];
 
     // Because this output will be read during shuffle, its compression codec must be controlled by

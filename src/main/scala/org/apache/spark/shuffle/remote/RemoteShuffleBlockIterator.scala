@@ -17,12 +17,12 @@
 
 package org.apache.spark.shuffle.remote
 
-import java.io.{IOException, InputStream}
+import java.io.{InputStream, IOException}
 import java.util.concurrent.LinkedBlockingQueue
-
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, Queue}
+
 import org.apache.spark.{SparkConf, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -101,8 +101,8 @@ final class RemoteShuffleBlockIterator(
   private[this] val results = new LinkedBlockingQueue[RemoteFetchResult]
 
   /**
-   * Current [[RemoteFetchResult]] being processed. We track this so we can release the current buffer
-   * in case of a runtime exception when processing the current buffer.
+   * Current [[RemoteFetchResult]] being processed. We track this so we can release
+   * the current buffer in case of a runtime exception when processing the current buffer.
    */
   @volatile private[this] var currentResult: SuccessRemoteFetchResult = null
 
@@ -208,9 +208,9 @@ final class RemoteShuffleBlockIterator(
             numBlocksToFetch += 1
             curRequestSize += size
           }
-          // We only care about the amount of requests, but not the total content size of blocks, due
-          // to during this fetch process we only get a range(offset and length) for each block. The
-          // block content will not be transferred through netty, while it's read from a
+          // We only care about the amount of requests, but not the total content size of blocks,
+          // due to during this fetch process we only get a range(offset and length) for each block.
+          // The block content will not be transferred through netty, while it's read from a
           // globally-accessible Hadoop compatible file system
           if (curBlocks.size >= maxBlocksInFlightPerAddress) {
             // Add this FetchRequest

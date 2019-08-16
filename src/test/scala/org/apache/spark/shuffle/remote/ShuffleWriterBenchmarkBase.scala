@@ -20,7 +20,16 @@ package org.apache.spark.shuffle.remote
 import java.io.File
 import java.util.UUID
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
+
 import org.apache.commons.io.FileUtils
+import org.mockito._
+import org.mockito.Answers.RETURNS_SMART_NULLS
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.when
+
 import org.apache.spark._
 import org.apache.spark.benchmark.BenchmarkBase
 import org.apache.spark.executor.TaskMetrics
@@ -30,14 +39,7 @@ import org.apache.spark.serializer.{KryoSerializer, Serializer, SerializerManage
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleWriter}
 import org.apache.spark.storage.{BlockManager, DiskBlockManager, TempShuffleBlockId}
 import org.apache.spark.util.{Benchmark, Utils}
-import org.mockito.Answers.RETURNS_SMART_NULLS
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.when
-import org.mockito.{Mock, MockitoAnnotations}
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
 
 abstract class ShuffleWriterBenchmarkBase extends BenchmarkBase {
 

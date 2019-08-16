@@ -18,6 +18,8 @@ package org.apache.spark.shuffle.remote
 
 import java.io.{File, FileOutputStream}
 
+import scala.util.Random
+
 import com.google.common.io.CountingOutputStream
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
@@ -28,7 +30,6 @@ import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
-import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.benchmark.BenchmarkBase
 import org.apache.spark.executor.TaskMetrics

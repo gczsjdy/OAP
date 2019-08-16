@@ -20,17 +20,18 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
+
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBlockResolver, RemoteShuffleManager, RemoteShuffleUtils}
 import org.apache.spark.storage.BlockId
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 /**
   * NOTE: This version of Spark 2.4.0 ExternalSorter is currently imported for the interface
@@ -629,7 +630,7 @@ private[spark] class RemoteSorter[K, V, C](
   }
 
   /**
-    * NOTE： This basically turns a memoryIterator to a spillable(to remote storage) iterator
+    * NOTE This basically turns a memoryIterator to a spillable(to remote storage) iterator
     *
     * Returns a destructive iterator for iterating over the entries of this map.
     * If this iterator is forced spill to remote storage to release memory when there is not enough
@@ -781,7 +782,7 @@ private[spark] class RemoteSorter[K, V, C](
   /*
    * An iterator wrapping the collection of this ExternalSorter, it supports to spill to
    * remote storage
-   **/
+   */
   private[this] class SpillableIterator(var upstream: Iterator[((Int, K), C)])
       extends Iterator[((Int, K), C)] {
 

@@ -27,8 +27,8 @@ import org.apache.spark.util.collection.RWritablePartitionedPairCollection._
   * [[PartitionedAppendOnlyMap]] in order to let the default local sort shuffle manager still work
   * with the remote shuffle package existed
   *
-  * Implementation of WritablePartitionedPairCollection that wraps a map in which the keys are tuples
-  * of (partition ID, K)
+  * Implementation of WritablePartitionedPairCollection that wraps a map in which the keys
+  * are tuples of (partition ID, K)
   */
 private[spark] class RPartitionedAppendOnlyMap[K, V]
     extends SizeTrackingAppendOnlyMap[(Int, K), V] with RWritablePartitionedPairCollection[K, V] {

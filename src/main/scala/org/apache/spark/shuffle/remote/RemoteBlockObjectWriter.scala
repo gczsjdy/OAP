@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.remote
 import java.io.{BufferedOutputStream, OutputStream}
 
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
@@ -48,8 +49,8 @@ private[spark] class HadoopFileSegment(val file: Path, val offset: Long, val len
   * callers should instead close with revertPartialWritesAndClose() to atomically revert the
   * uncommitted partial writes.
   *
-  * This class does not support concurrent writes. Also, once the writer has been opened it cannot be
-  * reopened again.
+  * This class does not support concurrent writes. Also, once the writer has been opened it
+  * cannot be reopened again.
   */
 private[spark] class RemoteBlockObjectWriter(
     val file: Path,

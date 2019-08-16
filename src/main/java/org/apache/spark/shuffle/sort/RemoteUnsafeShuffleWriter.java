@@ -16,19 +16,11 @@ package org.apache.spark.shuffle.sort;
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
-import javax.annotation.Nullable;
 import java.io.*;
 import java.util.Iterator;
 
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver;
-import org.apache.spark.shuffle.remote.RemoteShuffleManager;
-import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
-import org.apache.spark.shuffle.sort.SerializedShuffleHandle;
-import org.apache.spark.shuffle.sort.SortShuffleManager;
+import javax.annotation.Nullable;
+
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -38,16 +30,23 @@ import scala.reflect.ClassTag$;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
+import org.apache.commons.io.output.CloseShieldOutputStream;
+import org.apache.commons.io.output.CountingOutputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.spark.*;
+import org.apache.spark.Partitioner;
+import org.apache.spark.ShuffleDependency;
+import org.apache.spark.SparkConf;
+import org.apache.spark.TaskContext;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.io.CompressionCodec;
 import org.apache.spark.io.CompressionCodec$;
-import org.apache.commons.io.output.CloseShieldOutputStream;
-import org.apache.commons.io.output.CountingOutputStream;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
 import org.apache.spark.scheduler.MapStatus;
@@ -55,11 +54,13 @@ import org.apache.spark.scheduler.MapStatus$;
 import org.apache.spark.serializer.SerializationStream;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriter;
+import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver;
+import org.apache.spark.shuffle.remote.RemoteShuffleManager;
+import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
-import org.apache.spark.internal.config.package$;
 
 @Private
 public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -154,9 +155,11 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.initialSortBufferSize = sparkConf.getInt("spark.shuffle.sort.initialBufferSize",
         DEFAULT_INITIAL_SORT_BUFFER_SIZE);
     this.inputBufferSizeInBytes =
-        (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
+        (int) (long) sparkConf
+                .get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.outputBufferSizeInBytes =
-        (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
+        (int) (long) sparkConf
+                .get(package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     open();
   }
 
@@ -227,7 +230,8 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         partitioner.numPartitions(),
         sparkConf,
         writeMetrics);
-    serBuffer = new RemoteUnsafeShuffleWriter.MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
+    serBuffer = new RemoteUnsafeShuffleWriter
+            .MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
     serOutputStream = serializer.serializeStream(serBuffer);
   }
 
@@ -356,7 +360,8 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   /**
    * Merges spill files using Java FileStreams. This code path is typically slower than
-   * the NIO-based merge, {@link RemoteUnsafeShuffleWriter#mergeSpillsWithTransferTo(RemoteSpillInfo[],
+   * the NIO-based merge,
+   * {@link RemoteUnsafeShuffleWriter#mergeSpillsWithTransferTo(RemoteSpillInfo[],
    * Path)}, and it's mostly used in cases where the IO compression codec does not support
    * concatenation of compressed data, when encryption is enabled, or when users have
    * explicitly disabled use of {@code transferTo} in order to work around kernel bugs.
@@ -397,10 +402,11 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       for (int partition = 0; partition < numPartitions; partition++) {
         final long initialFileLength = mergedFileOutputStream.getByteCount();
-        // Shield the underlying output stream from close() and flush() calls, so that we can close
-        // the higher level streams to make sure all data is really flushed and internal state is
-        // cleaned.
-        OutputStream partitionOutput = new RemoteUnsafeShuffleWriter.CloseAndFlushShieldOutputStream(
+        // Shield the underlying output stream from close() and flush() calls, so that
+        // we can close the higher level streams to make sure all data is really flushed
+        // and internal state is cleaned.
+        OutputStream partitionOutput =
+                new RemoteUnsafeShuffleWriter.CloseAndFlushShieldOutputStream(
             new TimeTrackingOutputStream(writeMetrics, mergedFileOutputStream));
         partitionOutput = blockManager.serializerManager().wrapForEncryption(partitionOutput);
         if (compressionCodec != null) {
@@ -441,12 +447,13 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   /**
    * Merges spill files by using NIO's transferTo to concatenate spill partitions' bytes.
-   * This is only safe when the IO compression codec and serializer support concatenation of
-   * serialized streams.
+   * This is only safe when the IO compression codec and serializer support
+   * concatenation of serialized streams.
    *
    * @return the partition lengths in the merged file.
    */
-  private long[] mergeSpillsWithTransferTo(RemoteSpillInfo[] spills, Path outputFile) throws IOException {
+  private long[] mergeSpillsWithTransferTo(RemoteSpillInfo[] spills, Path outputFile)
+          throws IOException {
     assert (spills.length >= 2);
     final FileSystem fs = RemoteShuffleManager.getFileSystem();
     final int numPartitions = partitioner.numPartitions();
@@ -495,8 +502,8 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
                 "position " + bytesWrittenToMergedFile +
                 " after transferTo. Please check your kernel" +
                 " version to see if it is 2.6.32, as there is a kernel bug which will lead to " +
-                "unexpected behavior when using transferTo. You can set spark.file.transferTo=false " +
-                "to disable this NIO feature."
+                "unexpected behavior when using transferTo. You can set spark.file." +
+                "transferTo=false to disable this NIO feature."
         );
       }
       threwException = false;

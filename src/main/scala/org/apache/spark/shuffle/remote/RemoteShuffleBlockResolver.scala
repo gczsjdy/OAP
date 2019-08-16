@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.shuffle.remote
 
 import java.io._
@@ -6,6 +23,7 @@ import java.util.UUID
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, Weigher}
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -60,7 +78,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   lazy val indexCacheLoader: CacheLoader[Path, RemoteShuffleIndexInfo] =
     new CacheLoader[Path, RemoteShuffleIndexInfo]() {
-      override def load(file: Path)= new RemoteShuffleIndexInfo(file)
+      override def load(file: Path) = new RemoteShuffleIndexInfo(file)
   }
 
   lazy val shuffleIndexCache =
@@ -210,12 +228,12 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
         val range = shuffleIndexInfo.getIndex(blockId.reduceId)
         (range.getOffset, range.getLength)
       } else {
-        // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
-        // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
-        // (which may cause a reducer to be sent a different reducer's data). The explicit position
-        // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
-        // class of issue from re-occurring in the future which is why they are left here even though
-        // SPARK-22982 is fixed.
+        // SPARK-22982: if this FileInputStream's position is seeked forward by another
+        // piece of code which is incorrectly using our file descriptor then this code
+        // will fetch the wrong offsets (which may cause a reducer to be sent a different
+        // reducer's data). The explicit position checks added here were a useful debugging
+        // aid during SPARK-22982 and may help prevent this class of issue from re-occurring
+        // in the future which is why they are left here even though SPARK-22982 is fixed.
         val in = fs.open(indexFile)
         in.seek(blockId.reduceId * 8L)
         try {
@@ -224,8 +242,9 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
           val actualPosition = in.getPos()
           val expectedPosition = blockId.reduceId * 8L + 16
           if (actualPosition != expectedPosition) {
-            throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
-                s"expected $expectedPosition but actual position was $actualPosition.")
+            throw new Exception(s"SPARK-22982: Incorrect channel position " +
+              s"after index file reads: expected $expectedPosition but actual" +
+              s" position was $actualPosition.")
           }
           (offset, nextOffset - offset)
         } finally {

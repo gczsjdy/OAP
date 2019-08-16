@@ -17,10 +17,11 @@
 package org.apache.spark.shuffle.remote
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
-import org.scalatest.BeforeAndAfterEach
 
 class RemoteBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
 

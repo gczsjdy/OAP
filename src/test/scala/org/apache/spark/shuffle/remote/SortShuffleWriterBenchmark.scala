@@ -17,11 +17,12 @@
 
 package org.apache.spark.shuffle.remote
 
+import org.mockito.Mockito.when
+
 import org.apache.spark.Aggregator
 import org.apache.spark.shuffle.BaseShuffleHandle
 import org.apache.spark.shuffle.sort.SortShuffleWriter
 import org.apache.spark.util.Benchmark
-import org.mockito.Mockito.when
 
 /**
   * Benchmark to measure performance for aggregate primitives.

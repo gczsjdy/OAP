@@ -20,8 +20,13 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
+import scala.collection.{mutable, BufferedIterator}
+import scala.collection.mutable.ArrayBuffer
+
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
+
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
@@ -30,10 +35,6 @@ import org.apache.spark.shuffle.remote.{RemoteBlockObjectWriter, RemoteShuffleBl
 import org.apache.spark.storage.BlockId
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.RemoteAppendOnlyMap.HashComparator
-import org.apache.spark.{SparkEnv, TaskContext}
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.{BufferedIterator, mutable}
 
 /**
   * :: DeveloperApi ::
@@ -85,8 +86,9 @@ class RemoteAppendOnlyMap[K, V, C](
     * Objects are written in batches, with each batch using its own serialization stream. This
     * cuts down on the size of reference-tracking maps constructed when deserializing a stream.
     *
-    * NOTE: Setting this too low can cause excessive copying when serializing, since some serializers
-    * grow internal data structures by growing + copying every time the number of objects doubles.
+    * NOTE: Setting this too low can cause excessive copying when serializing, since some
+    * serializers grow internal data structures by growing + copying every time the number
+    * of objects doubles.
     */
   private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
 
