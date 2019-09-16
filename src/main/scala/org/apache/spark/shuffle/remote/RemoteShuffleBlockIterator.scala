@@ -317,7 +317,7 @@ final class RemoteShuffleBlockIterator(
     }
 
     currentResult = result.asInstanceOf[SuccessRemoteFetchResult]
-    (currentResult.blockId, new RemoteBufferReleasingInputStream(input, this))
+    (currentResult.blockId, input)
   }
 
   private def fetchUpToMaxBytes(): Unit = {
@@ -335,39 +335,6 @@ final class RemoteShuffleBlockIterator(
           s"Hadoop FS read failed for shuffle: $shufId, map: $mapId, reduce: $reduceId")
     }
   }
-}
-
-/**
- * Helper class that ensures a ManagedBuffer is released upon InputStream.close()
- */
-private class RemoteBufferReleasingInputStream(
-    private val delegate: InputStream,
-    private val iterator: RemoteShuffleBlockIterator)
-  extends InputStream {
-  private[this] var closed = false
-
-  override def read(): Int = delegate.read()
-
-  override def close(): Unit = {
-    if (!closed) {
-      delegate.close()
-      closed = true
-    }
-  }
-
-  override def available(): Int = delegate.available()
-
-  override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
-
-  override def skip(n: Long): Long = delegate.skip(n)
-
-  override def markSupported(): Boolean = delegate.markSupported()
-
-  override def read(b: Array[Byte]): Int = delegate.read(b)
-
-  override def read(b: Array[Byte], off: Int, len: Int): Int = delegate.read(b, off, len)
-
-  override def reset(): Unit = delegate.reset()
 }
 
 private[remote]
