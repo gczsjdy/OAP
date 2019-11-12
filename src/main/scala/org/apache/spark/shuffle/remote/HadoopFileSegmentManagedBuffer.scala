@@ -20,9 +20,8 @@ package org.apache.spark.shuffle.remote
 import java.io.{ByteArrayInputStream, InputStream, IOException}
 import java.nio.ByteBuffer
 
-import com.google.common.io.ByteStreams
 import io.netty.buffer.{ByteBuf, Unpooled}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -41,10 +40,10 @@ private[spark] class HadoopFileSegmentManagedBuffer(
   import HadoopFileSegmentManagedBuffer.fs
 
   private lazy val byteBuffer: ByteBuffer = {
-    var is: InputStream = null
+    var is: FSDataInputStream = null
     try {
       is = fs.open(file)
-      is.skip(offset)
+      is.seek(offset)
       val array = new Array[Byte](length.toInt)
       is.read(array)
       ByteBuffer.wrap(array)
@@ -64,13 +63,13 @@ private[spark] class HadoopFileSegmentManagedBuffer(
     if (length == 0) {
       new ByteArrayInputStream(new Array[Byte](0))
     } else {
-      var is: InputStream = null
+      var is: FSDataInputStream = null
       // Note by Chenzhao: Why??
       var shouldClose = true
 
       try {
         is = fs.open(file)
-        ByteStreams.skipFully(is, offset)
+        is.seek(offset)
         val r = new LimitedInputStream(is, length)
         shouldClose = false
         r
