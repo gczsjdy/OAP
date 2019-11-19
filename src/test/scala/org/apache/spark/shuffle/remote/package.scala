@@ -22,9 +22,14 @@ import org.apache.spark.SparkConf
 package object remote {
   def createDefaultConf(loadDefaults: Boolean = true): SparkConf = {
     new SparkConf(loadDefaults)
+      .set("spark.shuffle.manager", classOf[RemoteShuffleManager].getCanonicalName)
       // Unit tests should not rely on external systems, using local file system as storage
       .set("spark.shuffle.remote.storageMasterUri", "file://")
       .set("spark.shuffle.remote.filesRootDirectory", "/tmp")
       .set("spark.shuffle.sync", "true")
+  }
+  def createDefaultConfWithIndexCacheEnabled(loadDefaults: Boolean = true): SparkConf = {
+    createDefaultConf(loadDefaults)
+        .set("spark.shuffle.remote.index.cache.size", "5m")
   }
 }

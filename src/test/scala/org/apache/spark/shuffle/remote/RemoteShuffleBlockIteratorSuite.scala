@@ -25,13 +25,22 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.util.Utils
-
 
 class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkContext {
 
-  var shuffleManager: RemoteShuffleManager = _
+  testWithAndWithoutIndexCache("basic read")(basicRead)
+
+  private def testWithAndWithoutIndexCache(name: String, loadDefaults: Boolean = true)
+      (body: (SparkConf => Unit)): Unit = {
+    test(name + " without index cache") {
+      body(createDefaultConf(loadDefaults))
+    }
+    test(name + " with index cache") {
+      body(createDefaultConfWithIndexCacheEnabled(loadDefaults))
+    }
+  }
 
   private def prepareMapOutput(
       resolver: RemoteShuffleBlockResolver, shuffleId: Int, mapId: Int, blocks: Array[Byte]*) {
@@ -51,13 +60,15 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths.toArray, dataTmp)
   }
 
-  test("Basic read") {
+  private def basicRead(conf: SparkConf): Unit = {
 
+    sc = new SparkContext("local[1]", "Shuffle Iterator read", conf)
     val shuffleId = 1
 
-    val conf = createDefaultConf()
-    shuffleManager = new RemoteShuffleManager(conf)
-    val resolver = shuffleManager.shuffleBlockResolver
+    val env = SparkEnv.get
+    val blockManager = env.blockManager
+    val resolver = env.shuffleManager.shuffleBlockResolver.asInstanceOf[RemoteShuffleBlockResolver]
+    val transferService = blockManager.blockTransferService
 
     val numMaps = 3
 
@@ -81,11 +92,12 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     val blockInfos = for (i <- 0 until numMaps; j <- startPartition until endPartition) yield {
       (ShuffleBlockId(shuffleId, i, j), 1L)
     }
-    val blocksByAddress = Seq((BlockManagerId("0", "0", 6), blockInfos))
+
+    val blocksByAddress = Seq((blockManager.blockManagerId, blockInfos))
 
     val iter = new RemoteShuffleBlockIterator(
       TaskContext.empty(),
-      null,
+      transferService,
       resolver,
       blocksByAddress.toIterator,
       (_: BlockId, input: InputStream) => input,
@@ -107,14 +119,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     // Shuffle doesn't guarantee that the blocks are returned as ordered in blockInfos,
     // so the answer and expected should be sorted before compared
     assert(answer.map(_.toInt).sorted.zip(expected.map(_.toInt).sorted)
-      .forall{case (byteAns, byteExp) => byteAns === byteExp})
-  }
-
-  override def afterEach(): Unit = {
-    super.afterEach()
-    if (shuffleManager != null) {
-      shuffleManager.stop()
-    }
+        .forall{case (byteAns, byteExp) => byteAns === byteExp})
   }
 
   private def cleanAll(files: Path*): Unit = {

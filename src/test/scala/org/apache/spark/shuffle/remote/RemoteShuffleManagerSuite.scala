@@ -21,15 +21,18 @@ import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.{HttpRequest, HttpResponse}
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
-  testWithMultiplePath("repartition")(repartition)
+  testWithMultiplePath("repartition")(repartition(100, 10, 20))
+  testWithMultiplePath("re-large-partition")(repartition(1000000, 3, 2))
 
   testWithMultiplePath(
     "repartition with some map output empty")(repartitionWithEmptyMapOutput)
 
-  testWithMultiplePath("sort")(sort)
+  testWithMultiplePath("sort")(sort(500, 13, true))
+  testWithMultiplePath("sort large partition")(sort(500000, 2))
 
   test("decide using bypass-merge-sort shuffle writer or not") {
     sc = new SparkContext("local", "test", new SparkConf(true))
@@ -46,8 +49,8 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
         "local",
         "test",
         new SparkConf(true)
-          .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-          .set("spark.shuffle.service.enabled", "true"))
+            .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+            .set("spark.shuffle.service.enabled", "true"))
     }
   }
 
@@ -55,18 +58,18 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     val expectKey = "whatever"
     val expectVal = "55555"
     val mockHadoopConf: String = s"<configuration><property><name>$expectKey</name>" +
-      s"<value>$expectVal</value></property></configuration>"
+        s"<value>$expectVal</value></property></configuration>"
     val port = 56789
 
     val mockServer = startClientAndServer(port)
     mockServer.when(HttpRequest.request.withPath("/conf"))
-      .respond(HttpResponse.response().withBody(mockHadoopConf))
+        .respond(HttpResponse.response().withBody(mockHadoopConf))
 
     try {
       val conf = new SparkConf(false)
-        .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-        .set("spark.shuffle.remote.storageMasterUIPort", port.toString)
-        .set("spark.shuffle.remote.storageMasterUri", "hdfs://localhost:9001")
+          .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+          .set("spark.shuffle.remote.storageMasterUIPort", port.toString)
+          .set("spark.shuffle.remote.storageMasterUri", "hdfs://localhost:9001")
       val manager = new RemoteShuffleManager(conf)
       assert(manager.getHadoopConf.get(expectKey) == expectVal)
     }
@@ -87,47 +90,59 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     test(name + " with bypass-merge-sort shuffle path") {
       body(createSparkConf(loadDefaults, bypassMergeSort = true, unsafeOptimized = false))
     }
-    test(name + " with index files fetching from the executors which wrote them") {
+    test(name + " with bypass-merge-sort shuffle path + index cache") {
       body(createSparkConf(loadDefaults,
         bypassMergeSort = true, unsafeOptimized = false, indexCache = true))
     }
+    test(name + " with optimized shuffle path + index cache") {
+      body(createSparkConf(loadDefaults,
+        bypassMergeSort = false, unsafeOptimized = true, indexCache = true))
+    }
   }
 
-  private def repartition(conf: SparkConf): Unit = {
+  private def repartition(
+      dataSize: Int, preShuffleNumPartitions: Int, postShuffleNumPartitions: Int)
+      (conf: SparkConf): Unit = {
     sc = new SparkContext("local", "test_repartition", conf)
-    val data = 1 until 100
-    val rdd = sc.parallelize(data, 10)
-    val newRdd = rdd.repartition(20)
+    val data = 0 until dataSize
+    val rdd = sc.parallelize(data, preShuffleNumPartitions)
+    val newRdd = rdd.repartition(postShuffleNumPartitions)
     assert(newRdd.collect().sorted === data)
   }
 
   private def repartitionWithEmptyMapOutput(conf: SparkConf): Unit = {
     sc = new SparkContext("local", "test_repartition_empty", conf)
-    val data = 1 until 20
+    val data = 0 until 20
     val rdd = sc.parallelize(data, 30)
     val newRdd = rdd.repartition(40)
     assert(newRdd.collect().sorted === data)
   }
 
-  private def sort(conf: SparkConf): Unit = {
+  private def sort(
+      dataSize: Int, numPartitions: Int, differentMapSidePartitionLength: Boolean = false)
+      (conf: SparkConf): Unit = {
     sc = new SparkContext("local", "sort", conf)
-    val data = 1 until 500
-    val rdd = sc.parallelize(data, 13)
+    val data = if (differentMapSidePartitionLength) {
+      List.fill(dataSize/2)(0) ++ (dataSize / 2 until dataSize)
+    } else {
+      0 until dataSize
+    }
+    val rdd = sc.parallelize(Utils.randomize(data), numPartitions)
+
     val newRdd = rdd.sortBy((x: Int) => x.toLong)
     assert(newRdd.collect() === data)
   }
 
   private def createSparkConf(
       loadDefaults: Boolean, bypassMergeSort: Boolean, unsafeOptimized: Boolean = true,
-      indexCache: Boolean = false): SparkConf
-    = {
+      indexCache: Boolean = false): SparkConf = {
     val smallThreshold = 1
     val largeThreshold = 50
     val conf = createDefaultConf(loadDefaults)
-      .set("spark.shuffle.optimizedPathEnabled", unsafeOptimized.toString)
-      .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-      // Use a strict threshold as default so that Bypass-Merge-Sort shuffle writer won't be used
-      .set("spark.shuffle.sort.bypassMergeThreshold", smallThreshold.toString)
+        .set("spark.shuffle.optimizedPathEnabled", unsafeOptimized.toString)
+        .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+        // Use a strict threshold as default so that Bypass-Merge-Sort shuffle writer won't be used
+        .set("spark.shuffle.sort.bypassMergeThreshold", smallThreshold.toString)
     if (bypassMergeSort) {
       // Use a loose threshold
       conf.set("spark.shuffle.sort.bypassMergeThreshold", largeThreshold.toString)
