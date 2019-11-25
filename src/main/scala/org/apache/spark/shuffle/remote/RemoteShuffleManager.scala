@@ -191,6 +191,12 @@ private[spark] object RemoteShuffleManager extends Logging {
     active.shuffleBlockResolver
   }
 
+  def getConf: SparkConf = {
+    require(active != null,
+      "Active RemoteShuffleManager unassigned! It's probably never constructed")
+    active.conf
+  }
+
   /**
     * Make the decision also referring to a configuration
     */

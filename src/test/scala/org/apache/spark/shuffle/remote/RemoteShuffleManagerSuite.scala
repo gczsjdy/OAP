@@ -98,6 +98,20 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
       body(createSparkConf(loadDefaults,
         bypassMergeSort = false, unsafeOptimized = true, indexCache = true))
     }
+    test(name + " with whatever shuffle write path + constraining maxBlocksPerAdress") {
+      body(createSparkConf(loadDefaults, indexCache = false, setMaxBlocksPerAdress = true))
+    }
+    test(name + " with whatever shuffle write path + index cache + constraining maxBlocksPerAdress")
+    {
+      body(createSparkConf(loadDefaults, indexCache = true, setMaxBlocksPerAdress = true))
+    }
+    val default = RemoteShuffleConf.DATA_FETCH_EAGER_REQUIREMENT.defaultValue.get
+    val testWith = (true ^ default)
+    test(name + s" with eager requirement = ${testWith}")
+    {
+      body(createSparkConf(loadDefaults, indexCache = true)
+        .set(RemoteShuffleConf.DATA_FETCH_EAGER_REQUIREMENT.key, testWith.toString))
+    }
   }
 
   private def repartition(
@@ -134,8 +148,8 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   private def createSparkConf(
-      loadDefaults: Boolean, bypassMergeSort: Boolean, unsafeOptimized: Boolean = true,
-      indexCache: Boolean = false): SparkConf = {
+      loadDefaults: Boolean, bypassMergeSort: Boolean = false, unsafeOptimized: Boolean = true,
+      indexCache: Boolean = false, setMaxBlocksPerAdress: Boolean = false): SparkConf = {
     val smallThreshold = 1
     val largeThreshold = 50
     val conf = createDefaultConf(loadDefaults)
@@ -149,6 +163,9 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     }
     if (indexCache) {
       conf.set("spark.shuffle.remote.index.cache.size", "3m")
+    }
+    if (setMaxBlocksPerAdress) {
+      conf.set(RemoteShuffleConf.MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS.key, "1")
     }
     conf
   }

@@ -34,58 +34,65 @@ import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
   * be used in other functions
   */
 private[spark] class HadoopFileSegmentManagedBuffer(
-    val file: Path, val offset: Long, val length: Long)
+    val file: Path, val offset: Long, val length: Long, var eagerRequirement: Boolean = false)
     extends ManagedBuffer with Logging {
 
   import HadoopFileSegmentManagedBuffer.fs
 
-  private lazy val byteBuffer: ByteBuffer = {
-    var is: FSDataInputStream = null
-    try {
-      is = fs.open(file)
-      is.seek(offset)
-      val array = new Array[Byte](length.toInt)
-      is.read(array)
-      ByteBuffer.wrap(array)
-    } finally {
-      JavaUtils.closeQuietly(is)
-    }
-  }
-
-  private lazy val nettyByteBuffer = Unpooled.wrappedBuffer(byteBuffer)
-
-  override def size(): Long = length
-
-  override def nioByteBuffer(): ByteBuffer = ???
-
-  override def createInputStream(): InputStream = {
-
+  private lazy val dataStream: InputStream = {
     if (length == 0) {
       new ByteArrayInputStream(new Array[Byte](0))
     } else {
       var is: FSDataInputStream = null
-      // Note by Chenzhao: Why??
-      var shouldClose = true
+      is = fs.open(file)
+      is.seek(offset)
+      new LimitedInputStream(is, length)
+    }
+  }
 
+  private lazy val dataInByteArray: Array[Byte] = {
+    if (length == 0) {
+      Array.empty[Byte]
+    } else {
+      var is: FSDataInputStream = null
       try {
         is = fs.open(file)
         is.seek(offset)
-        val r = new LimitedInputStream(is, length)
-        shouldClose = false
-        r
+        val array = new Array[Byte](length.toInt)
+        is.readFully(array)
+        array
       } catch {
         case e: IOException =>
           var errorMessage = "Error in reading " + this
           if (is != null) {
             val size = fs.getFileStatus(file).getLen
-            errorMessage = "Error in reading " + this + " (actual file length " + size + ")"
+            errorMessage += " (actual file length " + size + ")"
           }
           throw new IOException(errorMessage, e)
       } finally {
-        if (shouldClose) JavaUtils.closeQuietly(is)
+        JavaUtils.closeQuietly(is)
       }
     }
+  }
 
+  private[spark] def prepareData(eagerRequirement: Boolean): Unit = {
+    this.eagerRequirement = eagerRequirement
+    if (! eagerRequirement) {
+      dataInByteArray
+    }
+  }
+
+  private lazy val nettyByteBuffer = ???
+
+  override def size(): Long = length
+
+  override def nioByteBuffer(): ByteBuffer = ???
+
+  override def createInputStream(): InputStream = if (eagerRequirement) {
+    logInfo("Eagerly requiring this data input stream")
+    dataStream
+  } else {
+    new ByteArrayInputStream(dataInByteArray)
   }
 
   override def equals(obj: Any): Boolean = {

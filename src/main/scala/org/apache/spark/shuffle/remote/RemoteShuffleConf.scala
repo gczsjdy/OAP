@@ -21,17 +21,17 @@ import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 
 object RemoteShuffleConf {
 
-  val STORAGE_HDFS_MASTER_UI_PORT: ConfigEntry[String] =
-    ConfigBuilder("spark.shuffle.remote.storageMasterUIPort")
-            .doc("Contact this UI port to retrieve HDFS configurations")
-            .stringConf
-            .createWithDefault("50070")
-
   val STORAGE_MASTER_URI: ConfigEntry[String] =
     ConfigBuilder("spark.shuffle.remote.storageMasterUri")
         .doc("Contact this storage master while persisting shuffle files")
         .stringConf
         .createWithDefault("hdfs://localhost:9001")
+
+  val STORAGE_HDFS_MASTER_UI_PORT: ConfigEntry[String] =
+    ConfigBuilder("spark.shuffle.remote.storageMasterUIPort")
+        .doc("Contact this UI port to retrieve HDFS configurations")
+        .stringConf
+        .createWithDefault("50070")
 
   val SHUFFLE_FILES_ROOT_DIRECTORY: ConfigEntry[String] =
     ConfigBuilder("spark.shuffle.remote.filesRootDirectory")
@@ -72,5 +72,34 @@ object RemoteShuffleConf {
             "from storage if needed)")
         .stringConf
         .createWithDefault("0")
+
+  val NUM_CONCURRENT_FETCH: ConfigEntry[Int] =
+    ConfigBuilder("spark.shuffle.remote.numReadThreads")
+      .doc("The maximum number of concurrent reading threads fetching shuffle blocks")
+      .intConf
+      .createWithDefault(Runtime.getRuntime.availableProcessors())
+
+  val MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS: ConfigEntry[Int] =
+    ConfigBuilder("spark.shuffle.remote.reducer.maxBlocksInFlightPerAddress")
+      .doc("This configuration overrides spark.reducer.maxBlocksInFlightPerAddress and takes" +
+        "effect in RemoteShuffle, which controls the maximum blocks sending requests sent to" +
+        " one Executor. Generally a reduce task fetches index files from another executor and" +
+        " then read data files from remote storage. This is by default set to a small Int" +
+        " instead of Int.MAX in vanilla Spark due to remotely reading index files" +
+        "(of too many blocks) can be expensive, and this way we can get the index information" +
+        " earlier, and then asynchronously read data files earlier. However, a small value of" +
+        " this setting can also increase the RPC messages sent between client Executor and " +
+        "server Executor.")
+      .intConf
+      .createWithDefault(10)
+
+  val DATA_FETCH_EAGER_REQUIREMENT: ConfigEntry[Boolean] =
+    ConfigBuilder("spark.shuffle.remote.eagerRequirementDataFetch")
+      .doc("With eager requirement = false, a shuffle block will be counted ready and served for" +
+        " compute until all content of the block is put in Spark's local memory. With eager " +
+        "requirement = true, a shuffle block will be served to later compute after the bytes " +
+        "required is fetched and put in memory")
+      .booleanConf
+      .createWithDefault(false)
 
 }

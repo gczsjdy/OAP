@@ -30,15 +30,31 @@ import org.apache.spark.util.Utils
 
 class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkContext {
 
-  testWithAndWithoutIndexCache("basic read")(basicRead)
+  // With/without index cache, configurations set/unset
+  testWithMultiplePath("basic read")(basicRead)
 
-  private def testWithAndWithoutIndexCache(name: String, loadDefaults: Boolean = true)
+  private def testWithMultiplePath(name: String, loadDefaults: Boolean = true)
       (body: (SparkConf => Unit)): Unit = {
-    test(name + " without index cache") {
-      body(createDefaultConf(loadDefaults))
+    val indexCacheDisabledConf = createDefaultConf(loadDefaults)
+    val indexCacheEnabledConf = createDefaultConfWithIndexCacheEnabled(loadDefaults)
+
+    test(name + " w/o index cache") {
+      body(indexCacheDisabledConf)
     }
-    test(name + " with index cache") {
-      body(createDefaultConfWithIndexCacheEnabled(loadDefaults))
+    test(name + " w/ index cache") {
+      body(indexCacheEnabledConf)
+    }
+    test(name + " w/o index cache, constraining maxBlocksInFlightPerAddress") {
+      body(indexCacheDisabledConf.set(RemoteShuffleConf.MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS.key, "1"))
+    }
+    test(name + " w index cache, constraining maxBlocksInFlightPerAddress") {
+      body(indexCacheEnabledConf.set(RemoteShuffleConf.MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS.key, "1"))
+    }
+    val default = RemoteShuffleConf.DATA_FETCH_EAGER_REQUIREMENT.defaultValue.get
+    val testWith = (true ^ default)
+    test(name + s" with eager requirement = ${testWith}") {
+      body(indexCacheEnabledConf.set(
+        RemoteShuffleConf.DATA_FETCH_EAGER_REQUIREMENT.key, testWith.toString))
     }
   }
 
