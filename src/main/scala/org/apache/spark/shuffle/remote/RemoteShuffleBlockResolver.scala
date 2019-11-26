@@ -83,12 +83,12 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   lazy val shuffleIndexCache =
     CacheBuilder.newBuilder
-        .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-        .weigher(new Weigher[Path, RemoteShuffleIndexInfo]() {
-          override def weigh(file: Path, indexInfo: RemoteShuffleIndexInfo): Int =
-            indexInfo.getSize
-        })
-        .build(indexCacheLoader)
+      .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
+      .weigher(new Weigher[Path, RemoteShuffleIndexInfo]() {
+        override def weigh(file: Path, indexInfo: RemoteShuffleIndexInfo): Int =
+          indexInfo.getSize
+      })
+      .build(indexCacheLoader)
 
 /**
   * Something like [[org.apache.spark.storage.DiskBlockManager.getFile()]]

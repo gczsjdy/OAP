@@ -224,54 +224,38 @@ final class RemoteShuffleBlockIterator(
     // at most maxBytes InFlight in order to limit the amount of data in flight.
     val remoteRequests = new ArrayBuffer[RemoteFetchRequest]
 
-    if (indexCacheEnabled) {
-      for ((address, blockInfos) <- blocksByAddress) {
-        val iterator = blockInfos.iterator
-        var curRequestSize = 0L
-        var curBlocks = new ArrayBuffer[(BlockId, Long)]
-        while (iterator.hasNext) {
-          val (blockId, size) = iterator.next()
-          if (size < 0) {
-            throw new BlockException(blockId, "Negative block size " + size)
-          } else if (size == 0) {
-            throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
-          } else {
-            curBlocks += ((blockId, size))
-            numBlocksToFetch += 1
-            curRequestSize += size
-          }
-          // We only care about the amount of requests, but not the total content size of blocks,
-          // due to during this fetch process we only get a range(offset and length) for each block.
-          // The block content will not be transferred through netty, while it's read from a
-          // globally-accessible Hadoop compatible file system
-          if (curRequestSize >= targetRequestSize ||
-            curBlocks.size >= maxBlocksInFlightPerAddress) {
-            // Add this FetchRequest
-            remoteRequests += new RemoteFetchRequest(address, curBlocks)
-            logDebug(s"Creating fetch request of $curRequestSize at $address " +
-              s"with ${curBlocks.size} blocks")
-            curBlocks = new ArrayBuffer[(BlockId, Long)]
-            curRequestSize = 0
-          }
+    for ((address, blockInfos) <- blocksByAddress) {
+      val iterator = blockInfos.iterator
+      var curRequestSize = 0L
+      var curBlocks = new ArrayBuffer[(BlockId, Long)]
+      while (iterator.hasNext) {
+        val (blockId, size) = iterator.next()
+        if (size < 0) {
+          throw new BlockException(blockId, "Negative block size " + size)
+        } else if (size == 0) {
+          throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
+        } else {
+          curBlocks += ((blockId, size))
+          numBlocksToFetch += 1
+          curRequestSize += size
         }
-        // Add in the final request
-        if (curBlocks.nonEmpty) {
+        // We only care about the amount of requests, but not the total content size of blocks,
+        // due to during this fetch process we only get a range(offset and length) for each block.
+        // The block content will not be transferred through netty, while it's read from a
+        // globally-accessible Hadoop compatible file system
+        if (curRequestSize >= targetRequestSize ||
+          curBlocks.size >= maxBlocksInFlightPerAddress) {
+          // Add this FetchRequest
           remoteRequests += new RemoteFetchRequest(address, curBlocks)
+          logDebug(s"Creating fetch request of $curRequestSize at $address " +
+            s"with ${curBlocks.size} blocks")
+          curBlocks = new ArrayBuffer[(BlockId, Long)]
+          curRequestSize = 0
         }
       }
-    } else {
-      // Each request contains the ShuffleBlocks from the same mapper
-      def cartesianProduct(blockInfo: (BlockManagerId, Seq[(BlockId, Long)])):
-      Seq[(BlockManagerId, (BlockId, Long))] = {
-        val (left, right) = blockInfo
-        for (each <- right) yield (left, (each._1, each._2))
-      }
-      // Each request contains the ShuffleBlocks from the same mapper
-      blocksByAddress.flatMap(cartesianProduct).toArray
-          .groupBy(_._2._1.asInstanceOf[ShuffleBlockId].mapId).foreach {
-        case (_, blockInfos) =>
-          remoteRequests += new RemoteFetchRequest(blockInfos(0)._1, blockInfos.map(_._2))
-          numBlocksToFetch += blockInfos.length
+      // Add in the final request
+      if (curBlocks.nonEmpty) {
+        remoteRequests += new RemoteFetchRequest(address, curBlocks)
       }
     }
     logInfo(s"Getting $numBlocksToFetch non-empty blocks, " +
