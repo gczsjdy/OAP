@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle.remote
 
 import java.io._
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, LongBuffer}
 import java.util.UUID
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, Weigher}
@@ -136,18 +136,26 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
           // This is the first successful attempt in writing the map outputs for this task,
           // so override any existing index and data files with the ones we wrote.
           val out = new DataOutputStream(new BufferedOutputStream(fs.create(indexTmp)))
+          val offsetsBuffer = new Array[Long](lengths.length + 1)
           Utils.tryWithSafeFinally {
             // We take in lengths of each block, need to convert it to offsets.
             var offset = 0L
-            out.writeLong(offset)
+            offsetsBuffer(0) = 0
+            out.writeLong(0)
+            var i = 1
             for (length <- lengths) {
               offset += length
+              offsetsBuffer(i) = offset
               out.writeLong(offset)
+              i += 1
             }
           } {
             out.close()
           }
-
+          // Put index info in cache if enabled
+          if (indexCacheEnabled) {
+            shuffleIndexCache.put(indexFile, new RemoteShuffleIndexInfo(offsetsBuffer))
+          }
           if (fs.exists(indexFile)) {
             fs.delete(indexFile, true)
           }
@@ -224,7 +232,6 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     val (offset, length) =
       if (indexCacheEnabled) {
         val shuffleIndexInfo = shuffleIndexCache.get(indexFile)
-        logInfo("Fetching from Guava index cache")
         val range = shuffleIndexInfo.getIndex(blockId.reduceId)
         (range.getOffset, range.getLength)
       } else {
@@ -290,24 +297,40 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   }
 }
 
-private[remote] class RemoteShuffleIndexInfo(indexFile: Path) {
+// For index cache feature, this is the data structure stored in Guava cache
+private[remote] class RemoteShuffleIndexInfo extends Logging {
 
-  private val fs = RemoteShuffleManager.getFileSystem
+  private var offsets: LongBuffer = _
+  private var size: Int = _
 
-  private val size = fs.getFileStatus(indexFile).getLen
-  private val buffer: ByteBuffer = ByteBuffer.allocate(size.toInt)
-  private val offsets = buffer.asLongBuffer
-  private var input: FSDataInputStream = _
-  try {
-    input = fs.open(indexFile)
-    input.readFully(buffer.array)
-  } finally {
-    if (input != null) {
-      input.close()
+  // Construction by reading index files from storage to memory, which happens in reduce stage
+  def this(indexFile: Path) {
+    this()
+    val fs = RemoteShuffleManager.getFileSystem
+
+    size = fs.getFileStatus(indexFile).getLen.toInt
+    val rawBuffer = ByteBuffer.allocate(size)
+    offsets = rawBuffer.asLongBuffer
+    var input: FSDataInputStream = null
+    try {
+      logInfo("Loading index file from storage to Guava cache")
+      input = fs.open(indexFile)
+      input.readFully(rawBuffer.array)
+    } finally {
+      if (input != null) {
+        input.close()
+      }
     }
   }
 
-  def getSize: Int = size.toInt
+  // Construction by directly putting the index offsets info in cache, which happens in map stage
+  def this(offsetsArray: Array[Long]) {
+    this()
+    size = offsetsArray.length * 8
+    offsets = LongBuffer.wrap(offsetsArray)
+  }
+
+  def getSize: Int = size
 
   /**
     * Get index offset for a particular reducer.
