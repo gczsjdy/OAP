@@ -18,19 +18,23 @@
 package org.apache.spark.shuffle.remote
 
 import java.io.{InputStream, IOException}
+import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-import org.apache.spark.{SparkConf, SparkException, TaskContext}
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle._
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 
 /**
  * An iterator that fetches multiple blocks. For local blocks, it fetches from the local block
@@ -68,7 +72,7 @@ final class RemoteShuffleBlockIterator(
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
     maxBlocksInFlightPerAddress: Int,
-    conf: SparkConf)
+    detectCorrupt: Boolean)
   extends Iterator[(BlockId, InputStream)] with Logging {
 
   import RemoteShuffleBlockIterator._
@@ -127,6 +131,12 @@ final class RemoteShuffleBlockIterator(
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
 
   /**
+    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
+    * at most once for those corrupted blocks.
+    */
+  private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
+
+  /**
     * Whether the iterator is still active. If isZombie is true, the callback interface will no
     * longer place fetched blocks into [[results]].
     */
@@ -176,15 +186,16 @@ final class RemoteShuffleBlockIterator(
                 logDebug("remainingBlocks: " + remainingBlocks)
               }
             }
-          case Failure(e) => throwDetailedException(BlockId(blockId), new Exception(
-              "Exception occurs while preparing shuffle data\n Caused by: " + e.getMessage))
+          case Failure(e) =>
+            results.put(FailureRemoteFetchResult(BlockId(blockId), address, e))
+
         } (RemoteShuffleBlockIterator.executionContext)
         logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         logError(s"Failed to get block(s) ", e)
-        results.put(FailureRemoteFetchResult(BlockId(blockId), e))
+        results.put(FailureRemoteFetchResult(BlockId(blockId), address, e))
       }
     }
     if (indexCacheEnabled) {
@@ -313,44 +324,72 @@ final class RemoteShuffleBlockIterator(
 
       result match {
         case r @ SuccessRemoteFetchResult(blockId, address, size, buf, isNetworkReqDone) =>
+          numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
+          readMetrics.incRemoteBytesRead(buf.size())
+          readMetrics.incRemoteBlocksFetched(1)
+          bytesInFlight -= size
+          if (isNetworkReqDone) {
+            reqsInFlight -= 1
+            logDebug("Number of requests in flight " + reqsInFlight)
+          }
+          if (buf.size == 0) {
+            // We will never legitimately receive a zero-size block. All blocks with zero records
+            // have zero size and all zero-size blocks have no records (and hence should never
+            // have been requested in the first place). This statement relies on behaviors of the
+            // shuffle writers, which are guaranteed by the following test cases:
+            //
+            // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
+            // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
+            // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing
+            //
+            // There is not an explicit test for SortShuffleWriter but the underlying APIs that
+            // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
+            // which returns a zero-size from commitAndGet() in case no records were written
+            // since the last call.
+            val msg = s"Received a zero-size buffer for block $blockId from $address " +
+              s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
+            throwFetchFailedException(blockId, address, new IOException(msg))
+          }
           val in = try {
-            numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
-            readMetrics.incRemoteBytesRead(buf.size())
-            readMetrics.incRemoteBlocksFetched(1)
-            bytesInFlight -= size
-            if (isNetworkReqDone) {
-              reqsInFlight -= 1
-              logDebug("Number of requests in flight " + reqsInFlight)
-            }
-            if (buf.size == 0) {
-              // We will never legitimately receive a zero-size block. All blocks with zero records
-              // have zero size and all zero-size blocks have no records (and hence should never
-              // have been requested in the first place). This statement relies on behaviors of the
-              // shuffle writers, which are guaranteed by the following test cases:
-              //
-              // - BypassMergeSortShuffleWriterSuite: "write with some empty partitions"
-              // - UnsafeShuffleWriterSuite: "writeEmptyIterator"
-              // - DiskBlockObjectWriterSuite: "commit() and close() without ever opening or writing
-              //
-              // There is not an explicit test for SortShuffleWriter but the underlying APIs that
-              // uses are shared by the UnsafeShuffleWriter (both writers use DiskBlockObjectWriter
-              // which returns a zero-size from commitAndGet() in case no records were written
-              // since the last call.
-              val msg = s"Received a zero-size buffer for block $blockId from $address " +
-                s"(expectedApproxSize = $size, isNetworkReqDone=$isNetworkReqDone)"
-              throwDetailedException(blockId, new IOException(msg))
-            }
             buf.createInputStream()
           } catch {
             case e: IOException =>
               // Actually here we know the buf is a HadoopFileSegmentManagedBuffer
-              logError("Failed to create input stream from block backed by HDFS file segment", e)
-              throwDetailedException(blockId.asInstanceOf[ShuffleBlockId], e)
+              logError("Failed to create input stream from block backed by Hadoop file segment", e)
+              throwFetchFailedException(blockId, address, e)
           }
-          input = streamWrapper(blockId, in)
-
-        case FailureRemoteFetchResult(blockId, e) =>
-          throwDetailedException(blockId.asInstanceOf[ShuffleBlockId], e)
+          var isStreamCopied: Boolean = false
+          // Detect ShuffleBlock corruption
+          try {
+            input = streamWrapper(blockId, in)
+            // Only copy the stream if it's wrapped by compression or encryption, also the size of
+            // block is small (the decompressed block is smaller than maxBytesInFlight)
+            if (detectCorrupt && !input.eq(in) && size < maxBytesInFlight / 3) {
+              isStreamCopied = true
+              val out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer.allocate)
+              // Decompress the whole block at once to detect any corruption, which could increase
+              // the memory usage tne potential increase the chance of OOM.
+              // TODO: manage the memory used here, and spill it into disk in case of OOM.
+              Utils.copyStream(input, out, closeStreams = true)
+              input = out.toChunkedByteBuffer.toInputStream(dispose = true)
+            }
+          } catch {
+            case e: IOException =>
+              if (corruptedBlocks.contains(blockId)) {
+                throwFetchFailedException(blockId, address, e)
+              } else {
+                logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                corruptedBlocks += blockId
+                fetchRequests += RemoteFetchRequest(address, Array((blockId, size)))
+                result = null
+              }
+          } finally {
+            if (isStreamCopied) {
+              in.close()
+            }
+          }
+        case FailureRemoteFetchResult(blockId, address, e) =>
+          throwFetchFailedException(blockId, address, e)
       }
 
       // Send fetch requests up to maxBytesInFlight
@@ -419,12 +458,14 @@ final class RemoteShuffleBlockIterator(
       maxBlocksInFlightPerAddress
   }
 
-  private def throwDetailedException(blockId: BlockId, e: Throwable) = {
+
+  private def throwFetchFailedException(blockId: BlockId, address: BlockManagerId, e: Throwable) = {
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
-        throw new SparkException(
-          s"Hadoop FS read failed for shuffle: $shufId, map: $mapId, reduce: $reduceId," +
-              s" exception: ${e.getMessage}")
+        // Suppress the BlockManagerId to only retry the failed map tasks, instead of all map tasks
+        // that shared the same executor with the failed map tasks. This is more reasonable in
+        // remote shuffle
+        throw new FetchFailedException(null, shufId.toInt, mapId.toInt, reduceId, e)
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
@@ -482,5 +523,6 @@ object RemoteShuffleBlockIterator {
    */
   private[remote] case class FailureRemoteFetchResult(
       blockId: BlockId,
+      address: BlockManagerId,
       e: Throwable) extends RemoteFetchResult
 }

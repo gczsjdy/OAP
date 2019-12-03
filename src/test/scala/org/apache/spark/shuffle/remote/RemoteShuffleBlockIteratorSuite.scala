@@ -17,21 +17,109 @@
 
 package org.apache.spark.shuffle.remote
 
-import java.io.InputStream
+import java.io.{InputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{doNothing, mock, when}
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 
 import org.apache.spark._
-import org.apache.spark.storage.{BlockId, ShuffleBlockId}
+import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.util.LimitedInputStream
+import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
 class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkContext {
 
   // With/without index cache, configurations set/unset
   testWithMultiplePath("basic read")(basicRead)
+
+  test("retry corrupt blocks") {
+    // To set an active ShuffleManager
+    new RemoteShuffleManager(createDefaultConfWithIndexCacheEnabled(true))
+    val blockResolver = mock(classOf[RemoteShuffleBlockResolver])
+    when(blockResolver.indexCacheEnabled).thenReturn(true)
+
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 1, 0) -> createMockManagedBuffer(),
+      ShuffleBlockId(0, 2, 0) -> createMockManagedBuffer()
+    )
+
+    val corruptLocalBuffer = mock(classOf[HadoopFileSegmentManagedBuffer])
+    doNothing().when(corruptLocalBuffer).prepareData(any())
+    when(corruptLocalBuffer.createInputStream()).thenThrow(new RuntimeException("oops"))
+
+    val transfer = mock(classOf[BlockTransferService])
+    when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any()))
+      .thenAnswer(new Answer[Unit] {
+        override def answer(invocation: InvocationOnMock): Unit = {
+          val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+            // Return the first block, and then fail.
+            listener.onBlockFetchSuccess(
+              ShuffleBlockId(0, 0, 0).toString, blocks(ShuffleBlockId(0, 0, 0)))
+            listener.onBlockFetchSuccess(
+              ShuffleBlockId(0, 1, 0).toString, mockCorruptBuffer())
+            listener.onBlockFetchSuccess(
+              ShuffleBlockId(0, 2, 0).toString, corruptLocalBuffer)
+        }
+      })
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
+      (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq)).toIterator
+
+    val taskContext = TaskContext.empty()
+    val iterator = new RemoteShuffleBlockIterator(
+      taskContext,
+      transfer,
+      blockResolver,
+      blocksByAddress,
+      (_, in) => new LimitedInputStream(in, 100),
+      48 * 1024 * 1024,
+      Int.MaxValue,
+      Int.MaxValue,
+      true)
+
+    // The first block should be returned without an exception
+    val (id1, _) = iterator.next()
+    assert(id1 === ShuffleBlockId(0, 0, 0))
+
+    // The next block is corrupt local block (the second one is corrupt and retried)
+    intercept[FetchFailedException] { iterator.next() }
+
+    intercept[FetchFailedException] { iterator.next() }
+  }
+
+  // Create a mock managed buffer for testing
+  private def createMockManagedBuffer(size: Int = 1): ManagedBuffer = {
+    val mockManagedBuffer = mock(classOf[HadoopFileSegmentManagedBuffer])
+    val in = mock(classOf[InputStream])
+    when(in.read(any[Array[Byte]])).thenReturn(1)
+    when(in.read(any(), any(), any())).thenReturn(1)
+    doNothing().when(mockManagedBuffer).prepareData(any())
+    when(mockManagedBuffer.createInputStream()).thenReturn(in)
+    when(mockManagedBuffer.size()).thenReturn(size)
+    mockManagedBuffer
+  }
+
+  private def mockCorruptBuffer(size: Long = 1L): ManagedBuffer = {
+    val corruptStream = mock(classOf[InputStream])
+    when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    val corruptBuffer = mock(classOf[HadoopFileSegmentManagedBuffer])
+    when(corruptBuffer.size()).thenReturn(size)
+    when(corruptBuffer.createInputStream()).thenReturn(corruptStream)
+    corruptBuffer
+  }
 
   private def testWithMultiplePath(name: String, loadDefaults: Boolean = true)
       (body: (SparkConf => Unit)): Unit = {
@@ -120,7 +208,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
-      conf)
+      true)
 
     val expected =
       expectPart0 ++ expectPart1 ++ expectPart2 ++ expectPart3 ++ expectPart4 ++ expectPart5
