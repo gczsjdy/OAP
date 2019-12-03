@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.remote
 
+import java.io.IOException
 import java.net.URL
 import java.util.concurrent.ConcurrentHashMap
 
@@ -153,8 +154,15 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
     // configuration needed here
     if (storageMasterUri.startsWith("hdfs")) {
       val host = storageMasterUri.split("//")(1).split(":")(0)
-      val port = active.conf.get("spark.shuffle.remote.storageMasterUIPort")
-      hadoopConf.addResource(new URL(s"http://$host:$port/conf").openConnection.getInputStream)
+      val port = active.conf.get(RemoteShuffleConf.STORAGE_HDFS_MASTER_UI_PORT)
+      val address = s"http://$host:$port/conf"
+      try {
+        hadoopConf.addResource(new URL(address).openConnection.getInputStream)
+      } catch {
+        // Suppress this Exception and use the default one
+        case e: IOException => logWarning(
+          s"Exception occurs getting configurations from: $address, caused by  ${e.getMessage}")
+      }
     }
 
     (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(active.conf, hadoopConf)

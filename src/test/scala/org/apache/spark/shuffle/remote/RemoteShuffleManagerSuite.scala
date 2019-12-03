@@ -54,7 +54,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("request configuration from remote storage master which is mocked in unit test") {
+  test("request HDFS configuration from remote storage master") {
     val expectKey = "whatever"
     val expectVal = "55555"
     val mockHadoopConf: String = s"<configuration><property><name>$expectKey</name>" +
@@ -76,6 +76,15 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     finally {
       mockServer.stop()
     }
+  }
+
+  test("request HDFS configuration from remote storage master:" +
+    " unset port or no connection cause no exception") {
+    val conf = new SparkConf(false)
+      .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
+      .set("spark.shuffle.remote.storageMasterUri", "hdfs://localhost:9001")
+    val manager = new RemoteShuffleManager(conf)
+    manager.getHadoopConf
   }
 
   // Optimized shuffle writer & non-optimized shuffle writer
