@@ -304,7 +304,6 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         sparkConf.getBoolean("spark.shuffle.unsafe.fastMergeEnabled", true);
     final boolean fastMergeIsSupported = !compressionEnabled ||
         CompressionCodec$.MODULE$.supportsConcatenationOfSerializedStreams(compressionCodec);
-    final boolean encryptionEnabled = blockManager.serializerManager().encryptionEnabled();
     try {
       if (spills.length == 0) {
         fs.create(outputFile).close(); // Create an empty file
@@ -326,17 +325,15 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         // strategies use different IO techniques.  We count IO during merge towards the shuffle
         // shuffle write time, which appears to be consistent with the "not bypassing merge-sort"
         // branch in ExternalSorter.
+
+        // We do not perform a transferTo-optimized merge due to underground storage may not support
+        // this (NIO FileChannel.transferTo)
         if (fastMergeEnabled && fastMergeIsSupported) {
           // Compression is disabled or we are using an IO compression codec that supports
           // decompression of concatenated compressed streams, so we can perform a fast spill merge
           // that doesn't need to interpret the spilled bytes.
-          if (transferToEnabled && !encryptionEnabled) {
-            logger.debug("Using transferTo-based fast merge");
-            partitionLengths = mergeSpillsWithTransferTo(spills, outputFile);
-          } else {
-            logger.debug("Using fileStream-based fast merge");
-            partitionLengths = mergeSpillsWithFileStream(spills, outputFile, null);
-          }
+          logger.debug("Using fileStream-based fast merge");
+          partitionLengths = mergeSpillsWithFileStream(spills, outputFile, null);
         } else {
           logger.debug("Using slow merge");
           partitionLengths = mergeSpillsWithFileStream(spills, outputFile, compressionCodec);
@@ -439,80 +436,6 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // throw exceptions during cleanup if threwException == false.
       for (InputStream stream : spillInputStreams) {
         Closeables.close(stream, threwException);
-      }
-      Closeables.close(mergedFileOutputStream, threwException);
-    }
-    return partitionLengths;
-  }
-
-  /**
-   * Merges spill files by using NIO's transferTo to concatenate spill partitions' bytes.
-   * This is only safe when the IO compression codec and serializer support
-   * concatenation of serialized streams.
-   *
-   * @return the partition lengths in the merged file.
-   */
-  private long[] mergeSpillsWithTransferTo(RemoteSpillInfo[] spills, Path outputFile)
-          throws IOException {
-    assert (spills.length >= 2);
-    final FileSystem fs = RemoteShuffleManager.getFileSystem();
-    final int numPartitions = partitioner.numPartitions();
-    final long[] partitionLengths = new long[numPartitions];
-    final InputStream[] spillInputStreams = new InputStream[spills.length];
-    final long[] spillInputChannelPositions = new long[spills.length];
-    OutputStream mergedFileOutputStream = null;
-
-    boolean threwException = true;
-    try {
-      for (int i = 0; i < spills.length; i++) {
-        //Note by Chenzhao: Need to revisit all the fs.open buffer size? Default is 4k
-        spillInputStreams[i] = fs.open(spills[i].file);
-      }
-      // This file needs to opened in append mode in order to work around a Linux kernel bug that
-      // affects transferTo; see SPARK-3948 for more details.
-      mergedFileOutputStream = fs.create(outputFile);
-
-      long bytesWrittenToMergedFile = 0;
-      for (int partition = 0; partition < numPartitions; partition++) {
-        for (int i = 0; i < spills.length; i++) {
-          final long partitionLengthInSpill = spills[i].partitionLengths[partition];
-          final long writeStartTime = System.nanoTime();
-          //Note by Chenzhao: Although this function's name is transferTo, underneath this
-          // copyStream no NIO transfer(faster assumed) will be called. Underlying buffer size
-          // inside this function call is 4k
-          Utils.copyStream(
-              spillInputStreams[i],
-              mergedFileOutputStream,
-              false,
-              true);
-          spillInputChannelPositions[i] += partitionLengthInSpill;
-          writeMetrics.incWriteTime(System.nanoTime() - writeStartTime);
-          bytesWrittenToMergedFile += partitionLengthInSpill;
-          partitionLengths[partition] += partitionLengthInSpill;
-        }
-      }
-      // Check the position after transferTo loop to see if it is in the right position and raise an
-      // exception if it is incorrect. The position will not be increased to the expected length
-      // after calling transferTo in kernel version 2.6.32. This issue is described at
-      // https://bugs.openjdk.java.net/browse/JDK-7052359 and SPARK-3948.
-      if (((FSDataOutputStream) mergedFileOutputStream).getPos() != bytesWrittenToMergedFile) {
-        throw new IOException(
-            "Current position " + ((FSDataOutputStream) mergedFileOutputStream).getPos() +
-                " does not equal expected " +
-                "position " + bytesWrittenToMergedFile +
-                " after transferTo. Please check your kernel" +
-                " version to see if it is 2.6.32, as there is a kernel bug which will lead to " +
-                "unexpected behavior when using transferTo. You can set spark.file." +
-                "transferTo=false to disable this NIO feature."
-        );
-      }
-      threwException = false;
-    } finally {
-      // To avoid masking exceptions that caused us to prematurely enter the finally block, only
-      // throw exceptions during cleanup if threwException == false.
-      for (int i = 0; i < spills.length; i++) {
-        assert(spillInputChannelPositions[i] == fs.getFileStatus(spills[i].file).getLen());
-        Closeables.close(spillInputStreams[i], threwException);
       }
       Closeables.close(mergedFileOutputStream, threwException);
     }
