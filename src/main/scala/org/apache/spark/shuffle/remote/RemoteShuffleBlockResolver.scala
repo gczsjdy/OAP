@@ -291,6 +291,17 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     RemoteShuffleUtils.createTempLocalBlock(dirPrefix)
   }
 
+  // Mainly for tests, similar to [[DiskBlockManager.getAllFiles]]
+  def getAllFiles(): Seq[Path] = {
+    val dir = new Path(dirPrefix)
+    val internalIter = fs.listFiles(dir, true)
+    new Iterator[Path] {
+      override def hasNext: Boolean = internalIter.hasNext
+
+      override def next(): Path = internalIter.next().getPath
+    }.toSeq
+  }
+
   override def stop(): Unit = {
     val dir = new Path(dirPrefix)
     fs.delete(dir, true)

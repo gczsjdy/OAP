@@ -18,10 +18,12 @@
 package org.apache.spark.util
 
 import org.apache.spark.SparkConf
+import org.apache.spark.shuffle.remote.RemoteShuffleManager
 
 package object collection {
   def createDefaultConf(loadDefaults: Boolean = true): SparkConf = {
     new SparkConf(loadDefaults)
+      .set("spark.shuffle.manager", classOf[RemoteShuffleManager].getCanonicalName)
       // Unit tests should not rely on external systems, using local file system as storage
       .set("spark.shuffle.remote.storageMasterUri", "file://")
       .set("spark.shuffle.remote.filesRootDirectory", "/tmp")
