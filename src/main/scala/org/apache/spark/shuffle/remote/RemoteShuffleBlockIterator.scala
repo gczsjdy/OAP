@@ -152,6 +152,16 @@ final class RemoteShuffleBlockIterator(
     synchronized {
       isZombie = true
     }
+    val iter = results.iterator()
+    while (iter.hasNext) {
+      val result = iter.next()
+      result match {
+        case SuccessRemoteFetchResult(_, _, _, buf, _) =>
+          readMetrics.incRemoteBytesRead(buf.size)
+          readMetrics.incRemoteBlocksFetched(1)
+        case _ =>
+      }
+    }
   }
 
   private[this] def sendRequest(req: RemoteFetchRequest) {
@@ -275,6 +285,8 @@ final class RemoteShuffleBlockIterator(
   }
 
   private[this] def initialize(): Unit = {
+    // Add a task completion callback (called in both success case and failure case) to cleanup.
+    context.addTaskCompletionListener[Unit](_ => cleanup())
 
     // Split local and remote blocks. Actually it assembles remote fetch requests due to all blocks
     // are remote under remote shuffle
