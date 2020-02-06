@@ -179,7 +179,8 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
         logger.error("Error while deleting temp file {}", tmp.toString());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+        RemoteShuffleManager$.MODULE$.getResolver().shuffleServerId(), partitionLengths);
   }
 
   @VisibleForTesting

@@ -74,7 +74,7 @@ private[spark] class RemoteShuffleWriter[K, V, C](
       val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       resolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
-      mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
+      mapStatus = MapStatus(RemoteShuffleManager.getResolver.shuffleServerId, partitionLengths)
     } finally {
       if (fs.exists(tmp) && !fs.delete(tmp, true)) {
         logError(s"Error while deleting temp file ${tmp.getName}")

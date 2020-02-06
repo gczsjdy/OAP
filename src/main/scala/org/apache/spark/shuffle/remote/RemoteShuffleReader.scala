@@ -44,7 +44,7 @@ private[spark] class RemoteShuffleReader[K, C](
   override def read(): Iterator[Product2[K, C]] = {
     val wrappedStreams = new RemoteShuffleBlockIterator(
       context,
-      SparkEnv.get.blockManager.shuffleClient,
+      resolver.remoteShuffleTransferService,
       resolver,
       mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
       serializerManager.wrapStream,

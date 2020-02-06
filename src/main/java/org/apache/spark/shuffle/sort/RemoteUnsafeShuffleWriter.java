@@ -21,6 +21,7 @@ import java.util.Iterator;
 
 import javax.annotation.Nullable;
 
+import org.apache.spark.shuffle.remote.RemoteShuffleManager$;
 import scala.Option;
 import scala.Product2;
 import scala.collection.JavaConverters;
@@ -32,7 +33,6 @@ import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import org.apache.commons.io.output.CloseShieldOutputStream;
 import org.apache.commons.io.output.CountingOutputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
@@ -60,7 +60,6 @@ import org.apache.spark.shuffle.remote.RemoteShuffleUtils;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.util.Utils;
 
 @Private
 public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -264,7 +263,8 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         logger.error("Error while deleting temp file {}", tmp.toString());
       }
     }
-    mapStatus = MapStatus$.MODULE$.apply(blockManager.shuffleServerId(), partitionLengths);
+    mapStatus = MapStatus$.MODULE$.apply(
+        RemoteShuffleManager$.MODULE$.getResolver().shuffleServerId(), partitionLengths);
   }
 
   @VisibleForTesting

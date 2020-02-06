@@ -20,7 +20,7 @@ package org.apache.spark.benchmark
 import java.io.{File, FileOutputStream, OutputStream}
 import java.util.UUID
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.shuffle.remote.createDefaultConf
 
 /**
@@ -35,7 +35,7 @@ abstract class BenchmarkBase {
   protected val defaultConf: SparkConf = new SparkConf(loadDefaults = false)
   protected val defaultConfRemote: SparkConf =
     createDefaultConf(loadDefaults = true).set("spark.app.id", s"test_${UUID.randomUUID()}")
-
+  var sc: SparkContext = _
 
   /**
     * Main process of the whole benchmark.
@@ -52,7 +52,14 @@ abstract class BenchmarkBase {
     output.foreach(_.write('\n'))
   }
 
+  def beforeAll(): Unit = {
+    sc = new SparkContext("local[1]", "shuffle_writer", defaultConfRemote)
+  }
+
   def main(args: Array[String]): Unit = {
+
+    beforeAll()
+
     val regenerateBenchmarkFiles: Boolean = System.getenv("SPARK_GENERATE_BENCHMARK_FILES") == "1"
     if (regenerateBenchmarkFiles) {
       val resultFileName = s"${this.getClass.getSimpleName.replace("$", "")}-results.txt"
@@ -78,5 +85,9 @@ abstract class BenchmarkBase {
   /**
     * Any shutdown code to ensure a clean shutdown
     */
-  def afterAll(): Unit = {}
+  def afterAll(): Unit = {
+    if (sc != null) {
+      sc.stop()
+    }
+  }
 }

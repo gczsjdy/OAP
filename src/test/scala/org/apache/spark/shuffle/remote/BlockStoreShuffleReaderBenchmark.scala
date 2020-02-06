@@ -93,6 +93,8 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
   private val securityManager = new org.apache.spark.SecurityManager(defaultConf)
   protected val memoryManager = new TestMemoryManager(defaultConf)
 
+  private lazy val remoteSparkEnv = sc.env
+
   class TestBlockManager(transferService: BlockTransferService,
       blockManagerMaster: BlockManagerMaster,
       dataFile: File,
@@ -177,23 +179,27 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
     resolver.stop()
   }
 
-  private def setEnvAndContext(): Unit = {
-    SparkEnv.set(new SparkEnv(
-      "0",
-      null,
-      serializer,
-      null,
-      serializerManager,
-      mapOutputTracker,
-      null,
-      null,
-      blockManager,
-      null,
-      null,
-      null,
-      null,
-      defaultConf
-    ))
+  private def setEnvAndContext(remote: Boolean = false): Unit = {
+    if (remote) {
+      SparkEnv.set(remoteSparkEnv)
+    } else {
+      SparkEnv.set(new SparkEnv(
+        "0",
+        null,
+        serializer,
+        null,
+        serializerManager,
+        mapOutputTracker,
+        null,
+        null,
+        blockManager,
+        null,
+        null,
+        null,
+        null,
+        defaultConf
+      ))
+    }
   }
 
   def setupReader(
@@ -251,9 +257,7 @@ object BlockStoreShuffleReaderBenchmark extends BenchmarkBase {
       aggregator: Option[Aggregator[String, String, String]] = None,
       sorter: Option[Ordering[String]] = None): RemoteShuffleReader[String, String] = {
 
-    setEnvAndContext()
-
-    RemoteShuffleManager.setActive(new RemoteShuffleManager(defaultConfRemote))
+    setEnvAndContext(true)
 
     val shuffleHandle = new BaseShuffleHandle(
       shuffleId = 0,

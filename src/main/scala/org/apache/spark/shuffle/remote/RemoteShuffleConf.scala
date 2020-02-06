@@ -73,9 +73,16 @@ object RemoteShuffleConf {
       .stringConf
       .createWithDefault("0")
 
+  val NUM_TRANSFER_SERVICE_THREADS: ConfigEntry[Int] =
+    ConfigBuilder("spark.shuffle.remote.numIndexReadThreads")
+      .doc("The maximum number of server/client threads used in RemoteShuffleTransferService for" +
+        "index files transferring")
+      .intConf
+      .createWithDefault(3)
+
   val NUM_CONCURRENT_FETCH: ConfigEntry[Int] =
     ConfigBuilder("spark.shuffle.remote.numReadThreads")
-      .doc("The maximum number of concurrent reading threads fetching shuffle blocks")
+      .doc("The maximum number of concurrent reading threads fetching shuffle data blocks")
       .intConf
       .createWithDefault(Runtime.getRuntime.availableProcessors())
 

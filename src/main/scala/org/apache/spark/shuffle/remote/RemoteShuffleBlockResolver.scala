@@ -24,9 +24,12 @@ import java.util.UUID
 import com.google.common.cache.{CacheBuilder, CacheLoader, Weigher}
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.BLOCK_MANAGER_PORT
+import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.netty.RemoteShuffleTransferService
 import org.apache.spark.network.shuffle.ShuffleIndexRecord
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.shuffle.ShuffleBlockResolver
@@ -54,6 +57,20 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
 
   // This referenced is shared for all the I/Os with shuffling storage system
   lazy val fs = new Path(dirPrefix).getFileSystem(RemoteShuffleManager.active.getHadoopConf)
+
+  private[remote] lazy val remoteShuffleTransferService: BlockTransferService = {
+    val env = SparkEnv.get
+    new RemoteShuffleTransferService(
+      conf,
+      env.securityManager,
+      env.blockManager.blockManagerId.host,
+      env.blockManager.blockManagerId.host,
+      env.conf.get(BLOCK_MANAGER_PORT),
+      conf.get(RemoteShuffleConf.NUM_TRANSFER_SERVICE_THREADS))
+  }
+  private[remote] lazy val shuffleServerId = {
+    remoteShuffleTransferService.asInstanceOf[RemoteShuffleTransferService].getShuffleServerId
+  }
 
   private[remote] val indexCacheEnabled: Boolean = {
     val size = JavaUtils.byteStringAsBytes(conf.get(RemoteShuffleConf.REMOTE_INDEX_CACHE_SIZE))
@@ -305,6 +322,13 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   override def stop(): Unit = {
     val dir = new Path(dirPrefix)
     fs.delete(dir, true)
+    try {
+      remoteShuffleTransferService.close()
+    } catch {
+      case e: Exception => logInfo(s"Exception thrown when closing " +
+        s"RemoteShuffleTransferService\n" +
+          s"Caused by: ${e.toString}\n${e.getStackTrace.mkString("\n")}")
+    }
   }
 }
 

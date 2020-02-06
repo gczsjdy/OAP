@@ -117,23 +117,6 @@ abstract class ShuffleWriterBenchmarkBase extends BenchmarkBase {
   when(rpcEnv.setupEndpoint(any[String], any[RpcEndpoint])).thenReturn(rpcEndpointRef)
 
   protected def setEnvAndContext(): Unit = {
-    SparkEnv.set(new SparkEnv(
-      "0",
-      null,
-      serializer,
-      null,
-      serializerManager,
-      null,
-      null,
-      null,
-      blockManager,
-      null,
-      null,
-      null,
-      null,
-      defaultConf
-    ))
-    RemoteShuffleManager.setActive(new RemoteShuffleManager(defaultConfRemote))
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
     TaskContext.setTaskContext(taskContext)
   }

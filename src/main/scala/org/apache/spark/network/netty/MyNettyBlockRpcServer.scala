@@ -19,21 +19,18 @@ package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
 
-import scala.collection.JavaConverters._
 import scala.language.existentials
-import scala.reflect.ClassTag
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.BlockDataManager
-import org.apache.spark.network.buffer.NioManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, StreamCallbackWithID, TransportClient}
 import org.apache.spark.network.server.{OneForOneStreamManager, RpcHandler, StreamManager}
 import org.apache.spark.network.shuffle.protocol._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.remote.{HadoopFileSegmentManagedBuffer, MessageForHadoopManagedBuffers, RemoteShuffleManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 
 /**
  * Serves requests to open blocks by simply registering one chunk per block requested.
@@ -42,7 +39,7 @@ import org.apache.spark.storage.{BlockId, ShuffleBlockId, StorageLevel}
  * Opened blocks are registered with the "one-for-one" strategy, meaning each Transport-layer Chunk
  * is equivalent to one Spark-level shuffle block.
  */
-class NettyBlockRpcServer(
+class MyNettyBlockRpcServer(
     appId: String,
     serializer: Serializer,
     blockManager: BlockDataManager)
@@ -60,38 +57,26 @@ class NettyBlockRpcServer(
     message match {
       case openBlocks: OpenBlocks =>
         val blocksNum = openBlocks.blockIds.length
-        if (blocksNum > 0 && BlockId.apply(openBlocks.blockIds(0)).isInstanceOf[ShuffleBlockId] &&
-            SparkEnv.get.conf.get(
-              "spark.shuffle.manager", classOf[SortShuffleManager].getName)
-                == classOf[RemoteShuffleManager].getName) {
+        val isShuffleRequest = (blocksNum > 0) &&
+          BlockId.apply(openBlocks.blockIds(0)).isInstanceOf[ShuffleBlockId] &&
+          (SparkEnv.get.conf.get("spark.shuffle.manager", classOf[SortShuffleManager].getName)
+            == classOf[RemoteShuffleManager].getName)
+        if (isShuffleRequest) {
           val blockIdAndManagedBufferPair =
             openBlocks.blockIds.map(block => (block, blockManager.getBlockData(
               BlockId.apply(block)).asInstanceOf[HadoopFileSegmentManagedBuffer]))
           responseContext.onSuccess(new MessageForHadoopManagedBuffers(
             blockIdAndManagedBufferPair).toByteBuffer.nioBuffer())
         } else {
-          val blocks = for (i <- (0 until blocksNum).view)
-            yield blockManager.getBlockData(BlockId.apply(openBlocks.blockIds(i)))
-          val streamId = streamManager.registerStream(appId, blocks.iterator.asJava)
-          logTrace(s"Registered streamId $streamId with $blocksNum buffers")
-          responseContext.onSuccess(new StreamHandle(streamId, blocksNum).toByteBuffer)
+          // This customized Netty RPC server is only served for RemoteShuffle requests,
+          // Other RPC messages or data chunks transferring should go through
+          // NettyBlockTransferService' NettyBlockRpcServer
+          throw new UnsupportedOperationException("MyNettyBlockRpcServer only serves remote" +
+            " shuffle requests for OpenBlocks")
         }
-
 
       case uploadBlock: UploadBlock =>
-        // StorageLevel and ClassTag are serialized as bytes using our JavaSerializer.
-        val (level: StorageLevel, classTag: ClassTag[_]) = {
-          serializer
-            .newInstance()
-            .deserialize(ByteBuffer.wrap(uploadBlock.metadata))
-            .asInstanceOf[(StorageLevel, ClassTag[_])]
-        }
-        val data = new NioManagedBuffer(ByteBuffer.wrap(uploadBlock.blockData))
-        val blockId = BlockId(uploadBlock.blockId)
-        logDebug(s"Receiving replicated block $blockId with level ${level} " +
-          s"from ${client.getSocketAddress}")
-        blockManager.putBlockData(blockId, data, level, classTag)
-        responseContext.onSuccess(ByteBuffer.allocate(0))
+        throw new UnsupportedOperationException("MyNettyBlockRpcServer doesn't serve UploadBlock")
     }
   }
 
@@ -99,20 +84,8 @@ class NettyBlockRpcServer(
       client: TransportClient,
       messageHeader: ByteBuffer,
       responseContext: RpcResponseCallback): StreamCallbackWithID = {
-    val message =
-      BlockTransferMessage.Decoder.fromByteBuffer(messageHeader).asInstanceOf[UploadBlockStream]
-    val (level: StorageLevel, classTag: ClassTag[_]) = {
-      serializer
-        .newInstance()
-        .deserialize(ByteBuffer.wrap(message.metadata))
-        .asInstanceOf[(StorageLevel, ClassTag[_])]
-    }
-    val blockId = BlockId(message.blockId)
-    logDebug(s"Receiving replicated block $blockId with level ${level} as stream " +
-      s"from ${client.getSocketAddress}")
-    // This will return immediately, but will setup a callback on streamData which will still
-    // do all the processing in the netty thread.
-    blockManager.putBlockDataAsStream(blockId, level, classTag)
+    throw new UnsupportedOperationException("MyNettyBlockRpcServer doesn't support receiving" +
+      " stream")
   }
 
   override def getStreamManager(): StreamManager = streamManager

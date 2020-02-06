@@ -26,8 +26,7 @@ import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.remote.RemoteShuffleManager.{active, appendRemoteStorageHadoopConfigurations}
 import org.apache.spark.shuffle.sort._

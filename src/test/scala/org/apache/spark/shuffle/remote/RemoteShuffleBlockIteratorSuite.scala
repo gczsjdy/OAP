@@ -31,6 +31,7 @@ import org.mockito.stubbing.Answer
 import org.apache.spark._
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.netty.RemoteShuffleTransferService
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.FetchFailedException
@@ -170,9 +171,12 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     val shuffleId = 1
 
     val env = SparkEnv.get
-    val blockManager = env.blockManager
     val resolver = env.shuffleManager.shuffleBlockResolver.asInstanceOf[RemoteShuffleBlockResolver]
-    val transferService = blockManager.blockTransferService
+    // There are two transferServices, use the one exclusively for RemoteShuffle
+    val transferService = env.shuffleManager.shuffleBlockResolver
+      .asInstanceOf[RemoteShuffleBlockResolver].remoteShuffleTransferService
+    val shuffleServerId =
+      transferService.asInstanceOf[RemoteShuffleTransferService].getShuffleServerId
 
     val numMaps = 3
 
@@ -197,7 +201,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
       (ShuffleBlockId(shuffleId, i, j), 1L)
     }
 
-    val blocksByAddress = Seq((blockManager.blockManagerId, blockInfos))
+    val blocksByAddress = Seq((shuffleServerId, blockInfos))
 
     val iter = new RemoteShuffleBlockIterator(
       TaskContext.empty(),
