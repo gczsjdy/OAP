@@ -15,7 +15,7 @@ be deployed on every compute node that runs Spark. Manually place it on all node
 
 ## Enable Remote Shuffle
 
-Add the jar files to the classpath of the Spark executor and driver: Put the
+Add the jar files to the classpath of Spark driver and executors: Put the
 following configurations in spark-defaults.conf or Spark submit command line arguments. 
 
 Note: For DAOS users, DAOS Hadoop/Java API jars should also be included in the classpath as we leverage DAOS Hadoop filesystem.
@@ -60,6 +60,22 @@ it locally. The feature can also be disabled by setting the value to zero.
     spark.shuffle.remote.index.cache.size        30m
 ```
 
+### Number of Threads Reading Data Files
+
+This is one of the parameters influencing shuffle read performance. It is to determine number of threads per executor reading shuffle data files from storage.
+
+```
+    spark.shuffle.remote.numReadThreads           5
+```
+
+### Number of Threads Transitioning Index Files (when index cache is enabled)
+
+This is one of the parameters influencing shuffle read performance. It is to determine the number of client and server threads that transmit index information from another executor’s cache. It is only valid when the index cache feature is enabled.
+
+```
+    spark.shuffle.remote.numIndexReadThreads      3
+```
+
 ### Bypass-merge-sort Threshold
 
 This threshold is used to decide using bypass-merge(hash-based) shuffle or not. By default we disable(by setting it to -1) 
@@ -71,27 +87,36 @@ the 3x shuffle size is gone through network, arriving at a remote storage system
     spark.shuffle.remote.bypassMergeThreshold     -1
 ```
 
-### Number of Threads Reading Data Files
+### Inherited Spark Shuffle Configurations
 
-This is one of the parameters influencing shuffle read performance. It is to determine per executor number of threads reading shuffle data files from Hadoop storage in reduce stage.
-
-### Inherited Spark shuffle configurations
-
-These configurations are inherited from upstream Spark, they are still supported in remote shuffle. More explanations can be found in [Spark docs](https://spark.apache.org/docs/2.4.4/configuration.html#shuffle-behavior).
+These configurations are inherited from upstream Spark, they are still supported in remote shuffle. More explanations can be found in [Spark core docs](https://spark.apache.org/docs/2.4.4/configuration.html#shuffle-behavior) and [Spark SQL docs](https://spark.apache.org/docs/2.4.4/sql-performance-tuning.html).
 ```
     spark.reducer.maxSizeInFlight
     spark.reducer.maxReqsInFlight
     spark.reducer.maxBlocksInFlightPerAddress
     spark.shuffle.compress
     spark.shuffle.file.buffer
+    spark.shuffle.io.maxRetries
+    spark.shuffle.io.numConnectionsPerPeer
+    spark.shuffle.io.preferDirectBufs
+    spark.shuffle.io.retryWait
+    spark.shuffle.io.backLog
     spark.shuffle.spill.compress
     spark.shuffle.accurateBlockThreshold
+    spark.sql.shuffle.partitions
 ```
 
-### Deprecated Spark shuffle configurations
+### Deprecated Spark Shuffle Configurations
 
 These configurations are deprecated and will not take effect.
 ```
-    spark.shuffle.sort.bypassMergeThreshold
-    spark.maxRemoteBlockSizeFetchToMem
+    spark.shuffle.sort.bypassMergeThreshold        # Replaced by spark.shuffle.remote.bypassMergeThreshold 
+    spark.maxRemoteBlockSizeFetchToMem             # As we assume no local disks on compute nodes, shuffle blocks are all fetched to memory
+
+    spark.shuffle.service.enabled                  # All following configurations are related to External Shuffle Service. ESS & remote shuffle cannot be enabled at the same time, as this remote shuffle facility takes over almost all functionalities of ESS.
+    spark.shuffle.service.port
+    spark.shuffle.service.index.cache.size
+    spark.shuffle.maxChunksBeingTransferred
+    spark.shuffle.registration.timeout
+    spark.shuffle.registration.maxAttempts
 ```
