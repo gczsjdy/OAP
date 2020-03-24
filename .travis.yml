@@ -16,7 +16,8 @@ before_script:
 - cd memkind && ./build.sh
 - make
 - sudo make install
-- cd ${TRAVIS_BUILD_DIR}
 script:
-- cd oap-cache/oap/
+- cd ${TRAVIS_BUILD_DIR}/oap-cache/oap/
 - mvn clean -q -Ppersistent-memory test
+- cd ${TRAVIS_BUILD_DIR}/oap-shuffle/remote-shuffle/
+- mvn test
