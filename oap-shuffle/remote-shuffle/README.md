@@ -6,7 +6,7 @@ This is an essential part of enabling Spark on disaggregated compute and storage
 
 ## Build and Deploy
 
-Build the project using the following command or download the pre-built jar: remote-shuffle-1.0.jar. This file needs to
+Build the project using the following command or download the pre-built jar: remote-shuffle-\<version\>.jar. This file needs to
 be deployed on every compute node that runs Spark. Manually place it on all nodes or let resource manager do the work.
 
 ```
