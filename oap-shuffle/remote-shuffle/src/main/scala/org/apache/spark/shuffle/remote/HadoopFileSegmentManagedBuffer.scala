@@ -119,7 +119,7 @@ private[remote] object HadoopFileSegmentManagedBuffer {
   * This is an RPC message encapsulating HadoopFileSegmentManagedBuffers. Slightly different with
   * the OpenBlocks message, this doesn't transfer block stream between executors through netty, but
   * only returns file segment ranges(offsets and lengths). Due to in remote shuffle, there is a
-  * globally-accessible remote storage, like HDFS.
+  * globally-accessible remote storage, like HDFS or DAOS.
   */
 class MessageForHadoopManagedBuffers(
     val buffers: Array[(String, HadoopFileSegmentManagedBuffer)]) extends Encodable {

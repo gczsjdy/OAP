@@ -21,6 +21,7 @@ import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.{HttpRequest, HttpResponse}
 
 import org.apache.spark._
+import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
 
 class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
@@ -68,7 +69,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     try {
       val conf = new SparkConf(false)
           .set("spark.shuffle.manager", "org.apache.spark.shuffle.remote.RemoteShuffleManager")
-          .set("spark.shuffle.remote.storageMasterUIPort", port.toString)
+          .set(RemoteShuffleConf.STORAGE_HDFS_MASTER_UI_PORT, port.toString)
           .set("spark.shuffle.remote.storageMasterUri", "hdfs://localhost:9001")
       val manager = new RemoteShuffleManager(conf)
       assert(manager.getHadoopConf.get(expectKey) == expectVal)
@@ -174,7 +175,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
       conf.set("spark.shuffle.remote.index.cache.size", "3m")
     }
     if (setMaxBlocksPerAdress) {
-      conf.set(RemoteShuffleConf.MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS.key, "1")
+      conf.set(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS.key, "1")
     }
     conf
   }
