@@ -24,7 +24,7 @@ import java.util.concurrent.CountDownLatch
 
 import scala.util.Random
 
-import org.apache.commons.cli.{DefaultParser, Options}
+import org.apache.commons.cli.{DefaultParser, HelpFormatter, Options}
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -82,7 +82,7 @@ object PerformanceEvaluationTool {
   def main(args: Array[String]): Unit = {
     try {
       parse(args) match {
-        case PerfOption(m, r, p, n, b, w, o, uri, d, l, no) =>
+        case Some(PerfOption(m, r, p, n, b, w, o, uri, d, l, no)) =>
           mappers = m
           reducers = r
           poolSize = p
@@ -98,24 +98,26 @@ object PerformanceEvaluationTool {
           // Set two SparkConfs according to the parameters at first, these configurations are
           // going to influence all later tests.
           prepareSparkConf()
-      }
 
-      data = generateData()
+          data = generateData()
 
-      prepareEnvForShuffleWrite()
-      val timeWrite = benchmarkShuffleWrite()
+          prepareEnvForShuffleWrite()
+          val timeWrite = benchmarkShuffleWrite()
 
-      printSummaryString(s"$writersType shuffle writer", timeWrite)
-      sc.stop()
+          printSummaryString(s"$writersType shuffle writer", timeWrite)
+          sc.stop()
 
-      if (!onlyWrite && successfulWrite) {
-        // Ensure memory pressure doesn't impact shuffle reading tests
-        System.gc()
+          if (!onlyWrite && successfulWrite) {
+            // Ensure memory pressure doesn't impact shuffle reading tests
+            System.gc()
 
-        prepareEnvForShuffleRead()
-        val timeRead = benchmarkShuffleRead()
+            prepareEnvForShuffleRead()
+            val timeRead = benchmarkShuffleRead()
 
-        printSummaryString(s"shuffle reader", timeRead)
+            printSummaryString(s"shuffle reader", timeRead)
+          }
+
+        case None =>
       }
 
     } finally {
@@ -174,6 +176,7 @@ object PerformanceEvaluationTool {
 
   private def initOptions(): Options = {
     val options = new Options()
+    options.addOption("h", "help", false, "display help message")
     options.addOption("m", "mappers", true, "# of mappers")
     options.addOption("r", "reducers", true, "# of reducers")
     options.addOption("p", "poolSize", true, "# of threads")
@@ -192,23 +195,32 @@ object PerformanceEvaluationTool {
     options
   }
 
-  private def parse(args: Array[String]): PerfOption = {
+  private def parse(args: Array[String]): Option[PerfOption] = {
     val parser = new DefaultParser
     val options = initOptions()
     val cmd = parser.parse(options, args)
-    PerfOption(
-      cmd.getOptionValue("m", "5").toInt,
-      cmd.getOptionValue("r", "5").toInt,
-      if (cmd.hasOption("p")) cmd.getOptionValue("p").toInt else cmd.getOptionValue("m", "5").toInt,
-      cmd.getOptionValue("n", "1000").toInt,
-      cmd.getOptionValue("b", "20000").toLong,
-      cmd.getOptionValue("w", "unsafe"),
-      cmd.hasOption("onlyWrite"),
-      cmd.getOptionValue("uri", "file://"),
-      cmd.getOptionValue("d", "/tmp"),
-      cmd.getOptionValue("l", "WARN"),
-      cmd.hasOption("noDelete")
-    )
+    if (cmd.hasOption("h")) {
+      new HelpFormatter().printHelp("PerformanceEvaluationTool", options)
+      None
+    } else {
+      Some(PerfOption(
+        cmd.getOptionValue("m", "5").toInt,
+        cmd.getOptionValue("r", "5").toInt,
+        if (cmd.hasOption("p")) {
+          cmd.getOptionValue("p").toInt
+        } else {
+          cmd.getOptionValue("m", "5").toInt
+        },
+        cmd.getOptionValue("n", "1000").toInt,
+        cmd.getOptionValue("b", "20000").toLong,
+        cmd.getOptionValue("w", "unsafe"),
+        cmd.hasOption("onlyWrite"),
+        cmd.getOptionValue("uri", "file://"),
+        cmd.getOptionValue("d", "/tmp"),
+        cmd.getOptionValue("l", "WARN"),
+        cmd.hasOption("noDelete")
+      ))
+    }
   }
 
   private def generateData(): Seq[Product2[Int, ByteBuffer]] = {
