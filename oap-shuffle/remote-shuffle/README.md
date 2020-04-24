@@ -120,3 +120,9 @@ These configurations are deprecated and will not take effect.
     spark.shuffle.registration.timeout
     spark.shuffle.registration.maxAttempts
 ```
+
+## Performance Evaluation Tool
+
+Leverage this tool to evaluate shuffle write/read performance separately under specific storage system.
+
+This tool is 
