@@ -86,6 +86,17 @@ object RemoteShuffleConf {
       .intConf
       .createWithDefault(Runtime.getRuntime.availableProcessors())
 
+  val REUSE_FILE_HANDLE: ConfigEntry[Boolean] =
+    ConfigBuilder("spark.shuffle.remote.reuseFileHandle")
+      .doc("By switching on this feature, the file handles returned by Filesystem open operations" +
+        " will be cached/reused inside an executor(across different rounds of reduce tasks)," +
+        " eliminating open overhead. This should improve the reduce stage performance only when" +
+        " file open operations occupy majority of the time, e.g. There is a large number of" +
+        " shuffle blocks, each reading a fairly small block of data, and there is no other" +
+        " compute in the reduce stage.")
+      .booleanConf
+      .createWithDefault(false)
+
   val MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS: ConfigEntry[Int] =
     ConfigBuilder("spark.shuffle.remote.reducer.maxBlocksInFlightPerAddress")
       .doc("This configuration overrides spark.reducer.maxBlocksInFlightPerAddress and takes" +
