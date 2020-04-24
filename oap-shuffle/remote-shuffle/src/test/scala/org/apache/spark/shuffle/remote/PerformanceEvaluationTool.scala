@@ -189,8 +189,6 @@ object PerformanceEvaluationTool {
     options.addOption("d", "dir", true, "Shuffle directory")
     options.addOption("l", "log", true, "Log level")
     options.addOption("noDelete", "noDelete", false, "Not deleting shuffle files after testing")
-    options.addOption("transferTo", "transferTo", true, "Shuffle directory"
-    )
 
     options
   }
