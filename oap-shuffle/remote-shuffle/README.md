@@ -87,6 +87,14 @@ the 3x shuffle size is gone through network, arriving at a remote storage system
     spark.shuffle.remote.bypassMergeThreshold     -1
 ```
 
+### Configurations fetching port for HDFS
+
+When the backend storage is HDFS, we contact http://$host:$port/conf to fetch configurations. They were not locally loaded because we assume absence of local storage.
+
+```
+    spark.shuffle.remote.hdfs.storageMasterUIPort  50070
+```
+
 ### Inherited Spark Shuffle Configurations
 
 These configurations are inherited from upstream Spark, they are still supported in remote shuffle. More explanations can be found in [Spark core docs](https://spark.apache.org/docs/2.4.4/configuration.html#shuffle-behavior) and [Spark SQL docs](https://spark.apache.org/docs/2.4.4/sql-performance-tuning.html).

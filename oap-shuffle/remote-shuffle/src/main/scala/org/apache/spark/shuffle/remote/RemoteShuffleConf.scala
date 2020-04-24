@@ -28,7 +28,7 @@ object RemoteShuffleConf {
       .createWithDefault("hdfs://localhost:9001")
 
   val STORAGE_HDFS_MASTER_UI_PORT: ConfigEntry[String] =
-    ConfigBuilder("spark.shuffle.remote.storageMasterUIPort")
+    ConfigBuilder("spark.shuffle.remote.hdfs.storageMasterUIPort")
       .doc("Contact this UI port to retrieve HDFS configurations")
       .stringConf
       .createWithDefault("50070")
@@ -40,7 +40,7 @@ object RemoteShuffleConf {
       .createWithDefault("/shuffle")
 
   val DFS_REPLICATION: ConfigEntry[Int] =
-    ConfigBuilder("spark.shuffle.remote.dfsReplication")
+    ConfigBuilder("spark.shuffle.remote.hdfs.replication")
       .doc("The default replication of remote storage system, will override dfs.replication" +
         " when HDFS is used as shuffling storage")
       .intConf
@@ -96,20 +96,6 @@ object RemoteShuffleConf {
         " compute in the reduce stage.")
       .booleanConf
       .createWithDefault(false)
-
-  val MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS: ConfigEntry[Int] =
-    ConfigBuilder("spark.shuffle.remote.reducer.maxBlocksInFlightPerAddress")
-      .doc("This configuration overrides spark.reducer.maxBlocksInFlightPerAddress and takes" +
-        "effect in RemoteShuffle, which controls the maximum blocks sending requests sent to" +
-        " one Executor. Generally a reduce task fetches index files from another executor and" +
-        " then read data files from remote storage. This is by default set to a small Int" +
-        " instead of Int.MAX in vanilla Spark due to remotely reading index files" +
-        "(of too many blocks) can be expensive, and this way we can get the index information" +
-        " earlier, and then asynchronously read data files earlier. However, a small value of" +
-        " this setting can also increase the RPC messages sent between client Executor and " +
-        "server Executor.")
-      .intConf
-      .createWithDefault(10)
 
   val DATA_FETCH_EAGER_REQUIREMENT: ConfigEntry[Boolean] =
     ConfigBuilder("spark.shuffle.remote.eagerRequirementDataFetch")
