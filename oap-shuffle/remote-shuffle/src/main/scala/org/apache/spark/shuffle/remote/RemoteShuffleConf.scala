@@ -89,6 +89,17 @@ object RemoteShuffleConf {
       .intConf
       .createWithDefault(Runtime.getRuntime.availableProcessors())
 
+  val REUSE_FILE_HANDLE: ConfigEntry[Boolean] =
+    ConfigBuilder("spark.shuffle.remote.reuseFileHandle")
+      .doc("By switching on this feature, the file handles returned by Filesystem open operations" +
+        " will be cached/reused inside an executor(across different rounds of reduce tasks)," +
+        " eliminating open overhead. This should improve the reduce stage performance only when" +
+        " file open operations occupy majority of the time, e.g. There is a large number of" +
+        " shuffle blocks, each reading a fairly small block of data, and there is no other" +
+        " compute in the reduce stage.")
+      .booleanConf
+      .createWithDefault(false)
+
   val DATA_FETCH_EAGER_REQUIREMENT: ConfigEntry[Boolean] =
     ConfigBuilder("spark.shuffle.remote.eagerRequirementDataFetch")
       .doc("With eager requirement = false, a shuffle block will be counted ready and served for" +
