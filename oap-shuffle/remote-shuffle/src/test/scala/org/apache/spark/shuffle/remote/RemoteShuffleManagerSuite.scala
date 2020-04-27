@@ -35,7 +35,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   testWithMultiplePath("sort")(sort(500, 13, true))
   testWithMultiplePath("sort large partition")(sort(500000, 2))
 
-  test("decide using bypass-merge-sort shuffle writer or not") {
+  test("disable bypass-merge-sort shuffle writer by default") {
     sc = new SparkContext("local", "test", new SparkConf(true))
     val partitioner = new HashPartitioner(100)
     val rdd = sc.parallelize((1 to 10).map(x => (x, x + 1)), 10)

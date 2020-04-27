@@ -56,12 +56,15 @@ object RemoteShuffleConf {
   val REMOTE_BYPASS_MERGE_THRESHOLD: ConfigEntry[Int] =
     ConfigBuilder("spark.shuffle.remote.bypassMergeThreshold")
       .doc("Remote shuffle manager uses this threshold to decide using bypass-merge(hash-based)" +
-        "shuffle or not, a new configuration is introduced because HDFS poorly handles large" +
-        "number of small files, and the bypass-merge shuffle write algorithm may produce" +
-        "M * R files as intermediate state. Note that this is compared with M * R, instead of" +
-        " R in local file system shuffle manager")
+        "shuffle or not, a new configuration is introduced(and it's -1 by default) because we" +
+        " want to explicitly make disabling hash-based shuffle writer as the default behavior." +
+        " When memory is relatively sufficient, using sort-based shuffle writer in remote shuffle" +
+        " is often more efficient than the hash-based one. Because the bypass-merge shuffle " +
+        "writer proceeds I/O of 3x total shuffle size: 1 time for read I/O and 2 times for write" +
+        " I/Os, and this can be an even larger overhead under remote shuffle, the 3x shuffle size" +
+        " is gone through network, arriving at remote storage system.")
       .intConf
-      .createWithDefault(300)
+      .createWithDefault(-1)
 
   val REMOTE_INDEX_CACHE_SIZE: ConfigEntry[String] =
     ConfigBuilder("spark.shuffle.remote.index.cache.size")

@@ -208,16 +208,17 @@ private[spark] object RemoteShuffleManager extends Logging {
     optimizedShuffleEnabled && SortShuffleManager.canUseSerializedShuffle(dependency)
   }
 
+  // This is identical to [[SortShuffleWriter.shouldBypassMergeSort]], except reading from
+  // a modified configuration name, due to we need to change the default threshold to -1 in remote
+  // shuffle
   def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
-    val bypassMergeThreshold = conf.get(RemoteShuffleConf.REMOTE_BYPASS_MERGE_THRESHOLD)
-    remoteShuffleShouldBypassMergeSort(bypassMergeThreshold, dep) &&
-      SortShuffleWriter.shouldBypassMergeSort(conf, dep)
-  }
 
-  private def remoteShuffleShouldBypassMergeSort(
-      remoteBypassThreshold: Int, dep: ShuffleDependency[_, _, _]): Boolean = {
-    // HDFS poorly handles large number of small files, so in remote shuffle, we decide using
-    // bypass-merge shuffle by compared numMappers * numReducers with the threshold
-    dep.rdd.partitions.length * dep.partitioner.numPartitions < remoteBypassThreshold
+    // We cannot bypass sorting if we need to do map-side aggregation.
+    if (dep.mapSideCombine) {
+      false
+    } else {
+      val bypassMergeThreshold = conf.get(RemoteShuffleConf.REMOTE_BYPASS_MERGE_THRESHOLD)
+      dep.partitioner.numPartitions <= bypassMergeThreshold
+    }
   }
 }
