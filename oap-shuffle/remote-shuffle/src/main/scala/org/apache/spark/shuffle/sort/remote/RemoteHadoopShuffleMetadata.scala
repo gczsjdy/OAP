@@ -22,11 +22,11 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.shuffle.api.metadata.{MapOutputMetadata, ShuffleMetadata}
 import org.apache.spark.storage.BlockManagerId
 
-class RemoteHadoopShuffleMetadata(val map: ConcurrentHashMap[Long, RemoteHadoopMapOutputMetadata])
-  extends ShuffleMetadata {
-  def put(mapId: Long, mapOutputMetadata: RemoteHadoopMapOutputMetadata)
-  : RemoteHadoopMapOutputMetadata = map.put(mapId, mapOutputMetadata)
-  def get(mapId: Long): RemoteHadoopMapOutputMetadata = map.get(mapId)
+class RemoteHadoopShuffleMetadata extends ShuffleMetadata {
+  private val map = new ConcurrentHashMap[Int, RemoteHadoopMapOutputMetadata]()
+  def put(mapIndex: Int, mapOutputMetadata: RemoteHadoopMapOutputMetadata)
+  : RemoteHadoopMapOutputMetadata = map.put(mapIndex, mapOutputMetadata)
+  def get(mapIndex: Int): RemoteHadoopMapOutputMetadata = map.get(mapIndex)
 }
 
 class RemoteHadoopMapOutputMetadata(val shuffleServerId: BlockManagerId) extends MapOutputMetadata

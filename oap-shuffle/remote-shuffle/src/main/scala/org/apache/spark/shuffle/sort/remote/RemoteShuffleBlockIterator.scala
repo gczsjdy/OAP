@@ -17,21 +17,26 @@
 
 package org.apache.spark.shuffle.sort.remote
 
+import java.{lang, util}
 import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.{REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS, REDUCER_MAX_REQS_IN_FLIGHT, REDUCER_MAX_SIZE_IN_FLIGHT}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle._
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.api.io.ShuffleBlockInputStream
+import org.apache.spark.shuffle.api.metadata.ShuffleBlockInfo
 import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
@@ -486,6 +491,46 @@ final class RemoteShuffleBlockIterator(
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
     }
+  }
+}
+
+private[spark] class RemoteShuffleBlockIterable(
+    context: TaskContext,
+    shuffleClient: BlockStoreClient,
+    resolver: RemoteShuffleBlockResolver,
+    blockInfos: lang.Iterable[ShuffleBlockInfo],
+    // Using this meta's help to derive the executor host & port, fetching index files (from cache)
+    meta: RemoteHadoopShuffleMetadata,
+    streamWrapper: (BlockId, InputStream) => InputStream,
+    conf: SparkConf)
+  extends lang.Iterable[ShuffleBlockInputStream] {
+
+  val blocksByAddress = blockInfos.asScala.groupBy { shuffleBlockInfo =>
+    meta.get(shuffleBlockInfo.getMapIndex).shuffleServerId
+  } .map { case (blockManagerId, shuffleBlockInfos) =>
+      (blockManagerId,
+        shuffleBlockInfos.map(info =>
+          (ShuffleBlockId(
+            info.getShuffleId,
+            info.getMapTaskAttemptId,
+            info.getReduceId).asInstanceOf[BlockId],
+            info.getBlockLength,
+            info.getMapIndex)).toSeq)
+    }.iterator
+
+  override def iterator(): util.Iterator[ShuffleBlockInputStream] = {
+    new RemoteShuffleBlockIterator(
+      TaskContext.get(),
+      resolver.remoteShuffleTransferService,
+      resolver,
+      blocksByAddress,
+      SparkEnv.get.serializerManager.wrapStream,
+      // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
+      conf.get(REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,
+      conf.get(REDUCER_MAX_REQS_IN_FLIGHT),
+      conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
+      conf.getBoolean("spark.shuffle.detectCorrupt", true))
+      .map(_._2).map(ShuffleBlockInputStream.of).asJava
   }
 }
 

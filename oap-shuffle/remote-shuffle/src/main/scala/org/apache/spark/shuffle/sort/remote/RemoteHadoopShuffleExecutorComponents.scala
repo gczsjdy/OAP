@@ -48,32 +48,15 @@ class RemoteHadoopShuffleExecutorComponents(conf: SparkConf) extends ShuffleExec
     blockInfos: lang.Iterable[ShuffleBlockInfo],
     dependency: ShuffleDependency[K, V, C],
     shuffleMetadata: Optional[ShuffleMetadata]): lang.Iterable[ShuffleBlockInputStream] = {
+    // Under remote shuffle, this is guaranteed to be defined.
     val meta = shuffleMetadata.get().asInstanceOf[RemoteHadoopShuffleMetadata]
-    new lang.Iterable[ShuffleBlockInputStream] {
-      override def iterator(): util.Iterator[ShuffleBlockInputStream] =
-        new RemoteShuffleBlockIterator(
-          TaskContext.get(),
-          resolver.remoteShuffleTransferService,
-          resolver,
-          blockInfos.asScala.groupBy(shuffleBlockInfo =>
-            meta.get(shuffleBlockInfo.getMapTaskAttemptId).shuffleServerId)
-            .map { case (blockManagerId, shuffleBlockInfos) =>
-              (blockManagerId,
-                shuffleBlockInfos.map(info =>
-                  (ShuffleBlockId(
-                    info.getShuffleId,
-                    info.getMapTaskAttemptId,
-                    info.getReduceId).asInstanceOf[BlockId],
-                    info.getBlockLength,
-                    info.getMapIndex)).toSeq)
-            }.iterator,
-          SparkEnv.get.serializerManager.wrapStream,
-          // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-          conf.get(REDUCER_MAX_SIZE_IN_FLIGHT) * 1024 * 1024,
-          conf.get(REDUCER_MAX_REQS_IN_FLIGHT),
-          conf.get(REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
-          conf.getBoolean("spark.shuffle.detectCorrupt", true))
-            .map(_._2).map(ShuffleBlockInputStream.of).asJava
-    }
+    new RemoteShuffleBlockIterable(
+      TaskContext.get(),
+      resolver.remoteShuffleTransferService,
+      resolver,
+      blockInfos,
+      meta,
+      SparkEnv.get.serializerManager.wrapStream,
+      conf)
   }
 }

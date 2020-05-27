@@ -28,8 +28,7 @@ class RemoteHadoopShuffleOutputTracker extends ShuffleOutputTracker {
     new ConcurrentHashMap[Int, RemoteHadoopShuffleMetadata]()
 
   override def registerShuffle(shuffleId: Int): Unit = {
-    shuffleStatuses.put(shuffleId,
-      new RemoteHadoopShuffleMetadata(new ConcurrentHashMap[Long, RemoteHadoopMapOutputMetadata]()))
+    shuffleStatuses.put(shuffleId, new RemoteHadoopShuffleMetadata())
   }
 
   /**
@@ -37,6 +36,7 @@ class RemoteHadoopShuffleOutputTracker extends ShuffleOutputTracker {
     * be used by Spark tasks.
     */
   override def unregisterShuffle(shuffleId: Int, blocking: Boolean): Unit = {
+    shuffleStatuses.remove(shuffleId)
     RemoteShuffleBlockResolver.active.removeDataByShuffleId(shuffleId)
   }
 
@@ -47,7 +47,7 @@ class RemoteHadoopShuffleOutputTracker extends ShuffleOutputTracker {
     mapOutputMetadata: MapOutputMetadata): Unit = {
     val mapperToMetadata = shuffleStatuses.get(shuffleId)
     mapperToMetadata.put(
-      mapTaskAttemptId, mapOutputMetadata.asInstanceOf[RemoteHadoopMapOutputMetadata])
+      mapId, mapOutputMetadata.asInstanceOf[RemoteHadoopMapOutputMetadata])
   }
 
   override def removeMapOutput(shuffleId: Int, mapId: Int, mapTaskAttemptId: Long): Unit = {}

@@ -75,7 +75,11 @@ class RemoteShuffleBlockResolver(val conf: SparkConf) extends ShuffleBlockResolv
       conf.get(RemoteShuffleConf.NUM_TRANSFER_SERVICE_THREADS))
   }
   private[remote] lazy val shuffleServerId = {
-    remoteShuffleTransferService.asInstanceOf[RemoteShuffleTransferService].getShuffleServerId
+    if (indexCacheEnabled) {
+      remoteShuffleTransferService.asInstanceOf[RemoteShuffleTransferService].getShuffleServerId
+    } else {
+      SparkEnv.get.blockManager.blockManagerId
+    }
   }
 
   private[remote] val indexCacheEnabled: Boolean = {
