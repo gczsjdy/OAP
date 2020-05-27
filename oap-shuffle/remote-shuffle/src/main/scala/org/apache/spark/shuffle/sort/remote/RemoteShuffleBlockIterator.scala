@@ -20,7 +20,7 @@ package org.apache.spark.shuffle.sort.remote
 import java.{lang, util}
 import java.io.{InputStream, IOException}
 import java.nio.ByteBuffer
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -335,10 +335,11 @@ final class RemoteShuffleBlockIterator(
     // is also corrupt, so the previous stage could be retried.
     // For local shuffle block, throw FailureFetchResult for the first IOException.
     while (result == null) {
-      val startFetchWait = System.currentTimeMillis()
+      val startFetchWait = System.nanoTime()
       result = results.take()
-      val stopFetchWait = System.currentTimeMillis()
-      readMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
+      val fetchWaitTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startFetchWait)
+      readMetrics.incFetchWaitTime(fetchWaitTime)
+
 
       result match {
         case r @SuccessRemoteFetchResult(

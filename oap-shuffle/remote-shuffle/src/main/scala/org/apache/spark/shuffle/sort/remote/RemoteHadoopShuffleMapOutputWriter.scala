@@ -27,11 +27,11 @@ import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWri
 import org.apache.spark.shuffle.api.metadata.MapOutputCommitMessage
 
 class RemoteHadoopShuffleMapOutputWriter(
-  shuffleId: Int,
-  mapId: Long,
-  numPartitions: Int,
-  resolver: RemoteShuffleBlockResolver,
-  conf: SparkConf) extends ShuffleMapOutputWriter with Logging {
+    shuffleId: Int,
+    mapId: Long,
+    numPartitions: Int,
+    resolver: RemoteShuffleBlockResolver,
+    conf: SparkConf) extends ShuffleMapOutputWriter with Logging {
 
   private lazy val fs = resolver.fs
 

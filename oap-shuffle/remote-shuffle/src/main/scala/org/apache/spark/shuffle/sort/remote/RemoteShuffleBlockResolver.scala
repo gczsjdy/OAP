@@ -397,7 +397,8 @@ class RemoteShuffleBlockResolver(val conf: SparkConf) extends ShuffleBlockResolv
           }
         }
       }
-      JavaUtils.closeQuietly(remoteShuffleTransferService)    } catch {
+      JavaUtils.closeQuietly(remoteShuffleTransferService)
+    } catch {
       case e: Exception => logInfo(s"Exception thrown when closing " +
         s"RemoteShuffleTransferService\n" +
           s"Caused by: ${e.toString}\n${e.getStackTrace.mkString("\n")}")

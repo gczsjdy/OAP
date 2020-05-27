@@ -102,11 +102,7 @@ private[spark] class HadoopFileSegmentManagedBuffer(
     }
   }
 
-  private lazy val nettyByteBuffer = ???
-
   override def size(): Long = length
-
-  override def nioByteBuffer(): ByteBuffer = ???
 
   override def createInputStream(): InputStream = if (eagerRequirement) {
     logInfo("Eagerly requiring this data input stream")
@@ -130,7 +126,9 @@ private[spark] class HadoopFileSegmentManagedBuffer(
 
   override def release(): ManagedBuffer = this
 
-  override def convertToNetty(): AnyRef = nettyByteBuffer
+  override def nioByteBuffer(): ByteBuffer = throw new UnsupportedOperationException
+
+  override def convertToNetty(): AnyRef = throw new UnsupportedOperationException
 }
 
 private[remote] object HadoopFileSegmentManagedBuffer {
