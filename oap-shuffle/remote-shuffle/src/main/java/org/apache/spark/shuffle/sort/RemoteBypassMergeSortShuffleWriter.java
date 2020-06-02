@@ -91,7 +91,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
   private final Partitioner partitioner;
   private final ShuffleWriteMetrics writeMetrics;
   private final int shuffleId;
-  private final int mapId;
+  private final long mapId;
   private final Serializer serializer;
   private final RemoteShuffleBlockResolver shuffleBlockResolver;
 
@@ -112,7 +112,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
       BlockManager blockManager,
       RemoteShuffleBlockResolver shuffleBlockResolver,
       BypassMergeSortShuffleHandle<K, V> handle,
-      int mapId,
+      long mapId,
       TaskContext taskContext,
       SparkConf conf) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
@@ -136,7 +136,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
       partitionLengths = new long[numPartitions];
       shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, null);
       mapStatus = MapStatus$.MODULE$.apply(
-          RemoteShuffleManager$.MODULE$.getResolver().shuffleServerId(), partitionLengths);
+          RemoteShuffleManager$.MODULE$.getResolver().shuffleServerId(), partitionLengths, mapId);
       return;
     }
     final SerializerInstance serInstance = serializer.newInstance();
@@ -181,7 +181,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
       }
     }
     mapStatus = MapStatus$.MODULE$.apply(
-        RemoteShuffleManager$.MODULE$.getResolver().shuffleServerId(), partitionLengths);
+        RemoteShuffleManager$.MODULE$.getResolver().shuffleServerId(), partitionLengths, mapId);
   }
 
   @VisibleForTesting

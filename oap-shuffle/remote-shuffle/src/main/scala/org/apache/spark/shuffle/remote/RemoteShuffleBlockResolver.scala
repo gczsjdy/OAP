@@ -23,10 +23,8 @@ import java.util.UUID
 import java.util.function.Consumer
 
 import scala.collection.mutable
-
 import com.google.common.cache.{CacheBuilder, CacheLoader, Weigher}
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
-
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.BLOCK_MANAGER_PORT
@@ -36,7 +34,7 @@ import org.apache.spark.network.netty.RemoteShuffleTransferService
 import org.apache.spark.network.shuffle.ShuffleIndexRecord
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.shuffle.ShuffleBlockResolver
-import org.apache.spark.storage.{ShuffleBlockId, TempLocalBlockId, TempShuffleBlockId}
+import org.apache.spark.storage.{BlockId, ShuffleBlockId, TempLocalBlockId, TempShuffleBlockId}
 import org.apache.spark.util.Utils
 
 /**
@@ -72,7 +70,11 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
       conf.get(RemoteShuffleConf.NUM_TRANSFER_SERVICE_THREADS))
   }
   private[remote] lazy val shuffleServerId = {
-    remoteShuffleTransferService.asInstanceOf[RemoteShuffleTransferService].getShuffleServerId
+    if (indexCacheEnabled) {
+      remoteShuffleTransferService.asInstanceOf[RemoteShuffleTransferService].getShuffleServerId
+    } else {
+      SparkEnv.get.blockManager.blockManagerId
+    }
   }
 
   private[remote] val indexCacheEnabled: Boolean = {
@@ -110,30 +112,27 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
       })
       .build(indexCacheLoader)
 
-/**
-  * Something like [[org.apache.spark.storage.DiskBlockManager.getFile()]]
-  */
-  def getDataFile(shuffleId: Int, mapId: Int): Path = {
+  def getDataFile(shuffleId: Int, mapId: Long): Path = {
     new Path(s"${dirPrefix}/${shuffleId}_${mapId}.data")
   }
 
-  def getIndexFile(shuffleId: Int, mapId: Int): Path = {
+  def getIndexFile(shuffleId: Int, mapId: Long): Path = {
     new Path(s"${dirPrefix}/${shuffleId}_${mapId}.index")
   }
 
   /**
-    * Write an index file with the offsets of each block, plus a final offset at the end for the
-    * end of the output file. This will be used by getBlockData to figure out where each block
-    * begins and ends.
-    *
-    * It will commit the data and index file as an atomic operation, use the existing ones, or
-    * replace them with new ones.
-    *
-    * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
-    */
+   * Write an index file with the offsets of each block, plus a final offset at the end for the
+   * end of the output file. This will be used by getBlockData to figure out where each block
+   * begins and ends.
+   *
+   * It will commit the data and index file as an atomic operation, use the existing ones, or
+   * replace them with new ones.
+   *
+   * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
+   */
   def writeIndexFileAndCommit(
       shuffleId: Int,
-      mapId: Int,
+      mapId: Long,
       lengths: Array[Long],
       dataTmp: Path): Unit = {
 
@@ -244,7 +243,8 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
     }
   }
 
-  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
+  def getBlockData(bId: BlockId, dirs: Option[Array[String]] = None): ManagedBuffer = {
+    val blockId = bId.asInstanceOf[ShuffleBlockId]
     // The block is actually going to be a range of a single map output file for this map, so
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
@@ -287,7 +287,7 @@ class RemoteShuffleBlockResolver(conf: SparkConf) extends ShuffleBlockResolver w
   /**
     * Remove data file and index file that contain the output data from one map.
     */
-  def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
+  def removeDataByMap(shuffleId: Int, mapId: Long): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (fs.exists(file)) {
       if (!fs.delete(file, true)) {

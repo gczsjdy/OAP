@@ -63,8 +63,8 @@ class MyNettyBlockRpcServer(
             == classOf[RemoteShuffleManager].getName)
         if (isShuffleRequest) {
           val blockIdAndManagedBufferPair =
-            openBlocks.blockIds.map(block => (block, blockManager.getBlockData(
-              BlockId.apply(block)).asInstanceOf[HadoopFileSegmentManagedBuffer]))
+            openBlocks.blockIds.map(block => (block, blockManager.getHostLocalShuffleData(
+              BlockId.apply(block), Array.empty).asInstanceOf[HadoopFileSegmentManagedBuffer]))
           responseContext.onSuccess(new MessageForHadoopManagedBuffers(
             blockIdAndManagedBufferPair).toByteBuffer.nioBuffer())
         } else {

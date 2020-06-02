@@ -345,10 +345,10 @@ public class RemoteUnsafeShuffleWriterSuite {
   }
 
   private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
-    memoryManager.limit(UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE * 16);
+    memoryManager.limit(UnsafeShuffleWriter.DEFAULT_INITIAL_SER_BUFFER_SIZE * 16);
     final RemoteUnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
-    for (int i = 0; i < UnsafeShuffleWriter.DEFAULT_INITIAL_SORT_BUFFER_SIZE + 1; i++) {
+    for (int i = 0; i < UnsafeShuffleWriter.DEFAULT_INITIAL_SER_BUFFER_SIZE + 1; i++) {
       dataToWrite.add(new Tuple2<>(i, i));
     }
     writer.write(dataToWrite.iterator());
@@ -423,7 +423,7 @@ public class RemoteUnsafeShuffleWriterSuite {
             blockManager,
             shuffleBlockResolver,
             taskMemoryManager,
-            new SerializedShuffleHandle<>(0, 1, shuffleDep),
+            new SerializedShuffleHandle<>(0,  shuffleDep),
             0, // map id
             taskContext,
             conf);
@@ -472,7 +472,7 @@ public class RemoteUnsafeShuffleWriterSuite {
         blockManager,
         shuffleBlockResolver,
         taskMemoryManager,
-        new SerializedShuffleHandle<>(0, 1, shuffleDep),
+        new SerializedShuffleHandle<>(0, shuffleDep),
         1, // map id
         taskContext,
         conf);

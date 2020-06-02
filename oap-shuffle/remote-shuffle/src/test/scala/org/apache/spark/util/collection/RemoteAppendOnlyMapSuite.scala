@@ -561,7 +561,7 @@ class RemoteAppendOnlyMapSuite extends SparkFunSuite
     val conf = createSparkConf(loadDefaults = false)
         .set("spark.shuffle.memoryFraction", "0.01")
         .set("spark.memory.useLegacyMode", "true")
-        .set("spark.testing.memory", "100000000")
+        .set("spark.testing.memory", "500000000")
         .set("spark.shuffle.sort.bypassMergeThreshold", "0")
     sc = new SparkContext("local", "test", conf)
     val N = 2e5.toInt

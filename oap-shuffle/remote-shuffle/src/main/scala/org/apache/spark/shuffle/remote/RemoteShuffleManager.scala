@@ -26,10 +26,11 @@ import org.apache.hadoop.fs.FileSystem
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.remote.RemoteShuffleManager.{active, appendRemoteStorageHadoopConfigurations}
 import org.apache.spark.shuffle.sort._
+import org.apache.spark.util.collection.OpenHashSet
 
 /**
   * In remote shuffle, data is written to a remote Hadoop compatible file system instead of local
@@ -54,9 +55,9 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
   }
 
   /**
-    * A mapping from shuffle ids to the number of mappers producing output for those shuffles.
-    */
-  private[this] val numMapsForShuffle = new ConcurrentHashMap[Int, Int]()
+   * A mapping from shuffle ids to the task ids of mappers producing output for those shuffles.
+   */
+  private[this] val taskIdMapsForShuffle = new ConcurrentHashMap[Int, OpenHashSet[Long]]()
 
   override val shuffleBlockResolver = new RemoteShuffleBlockResolver(conf)
 
@@ -65,7 +66,6 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
     */
   override def registerShuffle[K, V, C](
       shuffleId: Int,
-      numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
     if (RemoteShuffleManager.shouldBypassMergeSort(conf, dependency)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
@@ -74,13 +74,13 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
       // together the spilled files, which would happen with the normal code path. The downside is
       // having multiple files open at a time and thus more memory allocated to buffers.
       new BypassMergeSortShuffleHandle[K, V](
-        shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
+        shuffleId, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else if (RemoteShuffleManager.canUseSerializedShuffle(dependency, conf)) {
       new SerializedShuffleHandle[K, V](
-        shuffleId, numMaps, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
+        shuffleId, dependency.asInstanceOf[ShuffleDependency[K, V, V]])
     } else {
       // Otherwise, buffer map outputs in a deserialized form:
-      new BaseShuffleHandle(shuffleId, numMaps, dependency)
+      new BaseShuffleHandle(shuffleId, dependency)
     }
   }
 
@@ -92,7 +92,25 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
       handle: ShuffleHandle,
       startPartition: Int,
       endPartition: Int,
-      context: TaskContext): ShuffleReader[K, C] = {
+      context: TaskContext,
+      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    new RemoteShuffleReader(
+      handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
+      shuffleBlockResolver,
+      startPartition,
+      endPartition,
+      context)
+  }
+
+  override def getReaderForRange[K, C](
+      handle: ShuffleHandle,
+      startMapIndex: Int,
+      endMapIndex: Int,
+      startPartition: Int,
+      endPartition: Int,
+      context: TaskContext,
+      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+    // Not right, place holder.
     new RemoteShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
       shuffleBlockResolver,
@@ -104,10 +122,12 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
   /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](
       handle: ShuffleHandle,
-      mapId: Int,
-      context: TaskContext): ShuffleWriter[K, V] = {
-    numMapsForShuffle.putIfAbsent(
-      handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
+      mapId: Long,
+      context: TaskContext,
+      metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
+    val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
+      handle.shuffleId, _ => new OpenHashSet[Long](16))
+    mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -132,9 +152,9 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
 
   /** Remove a shuffle's metadata from the ShuffleManager. */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
-    Option(numMapsForShuffle.remove(shuffleId)).foreach { numMaps =>
-      (0 until numMaps).foreach { mapId =>
-        shuffleBlockResolver.removeDataByMap(shuffleId, mapId)
+    Option(taskIdMapsForShuffle.remove(shuffleId)).foreach { mapTaskIds =>
+      mapTaskIds.iterator.foreach { mapTaskId =>
+        shuffleBlockResolver.removeDataByMap(shuffleId, mapTaskId)
       }
     }
     true
@@ -160,7 +180,7 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
       }
     }
 
-    (new SparkHadoopUtil).appendS3AndSparkHadoopConfigurations(active.conf, hadoopConf)
+    (new SparkHadoopUtil).appendS3AndSparkHadoopHiveConfigurations(active.conf, hadoopConf)
     appendRemoteStorageHadoopConfigurations(active.conf, hadoopConf)
     hadoopConf
   }

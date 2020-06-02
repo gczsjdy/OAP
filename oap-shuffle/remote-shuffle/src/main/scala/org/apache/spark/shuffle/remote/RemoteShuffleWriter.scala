@@ -27,7 +27,7 @@ import org.apache.spark.util.collection.RemoteSorter
 private[spark] class RemoteShuffleWriter[K, V, C](
     resolver: RemoteShuffleBlockResolver,
     handle: BaseShuffleHandle[K, V, C],
-    mapId: Int,
+    mapId: Long,
     context: TaskContext)
     extends ShuffleWriter[K, V] with Logging {
 
@@ -74,7 +74,8 @@ private[spark] class RemoteShuffleWriter[K, V, C](
       val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
       val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
       resolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
-      mapStatus = MapStatus(RemoteShuffleManager.getResolver.shuffleServerId, partitionLengths)
+      mapStatus =
+        MapStatus(RemoteShuffleManager.getResolver.shuffleServerId, partitionLengths, mapId)
     } finally {
       if (fs.exists(tmp) && !fs.delete(tmp, true)) {
         logError(s"Error while deleting temp file ${tmp.getName}")

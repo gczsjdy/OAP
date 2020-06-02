@@ -21,7 +21,7 @@ import java.io.{ByteArrayInputStream, InputStream, IOException}
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.collection.mutable.HashMap
+import scala.collection.mutable
 
 import io.netty.buffer.{ByteBuf, Unpooled}
 import org.apache.hadoop.fs.{FSDataInputStream, Path}
@@ -32,10 +32,10 @@ import org.apache.spark.network.protocol.{Encodable, Encoders}
 import org.apache.spark.network.util.{JavaUtils, LimitedInputStream}
 
 /**
-  * Something like [[org.apache.spark.network.buffer.FileSegmentManagedBuffer]], instead we only
-  * need createInputStream function, so we don't need a TransportConf field, which is intended to
-  * be used in other functions
-  */
+ * Something like [[org.apache.spark.network.buffer.FileSegmentManagedBuffer]], instead we only
+ * need createInputStream function, so we don't need a TransportConf field, which is intended to
+ * be used in other functions
+ */
 private[spark] class HadoopFileSegmentManagedBuffer(
     val file: Path, val offset: Long, val length: Long, var eagerRequirement: Boolean = false)
     extends ManagedBuffer with Logging {
@@ -65,7 +65,7 @@ private[spark] class HadoopFileSegmentManagedBuffer(
             if (pathToHandleMap == null) {
               val res = fs.open(file)
               handleCache.put(Thread.currentThread().getId,
-                new HashMap[Path, FSDataInputStream]() += (file -> res))
+                new mutable.HashMap[Path, FSDataInputStream]() += (file -> res))
               res
             } else {
               pathToHandleMap.getOrElseUpdate(file, fs.open(file))
@@ -102,11 +102,7 @@ private[spark] class HadoopFileSegmentManagedBuffer(
     }
   }
 
-  private lazy val nettyByteBuffer = ???
-
   override def size(): Long = length
-
-  override def nioByteBuffer(): ByteBuffer = ???
 
   override def createInputStream(): InputStream = if (eagerRequirement) {
     logInfo("Eagerly requiring this data input stream")
@@ -124,27 +120,32 @@ private[spark] class HadoopFileSegmentManagedBuffer(
     }
   }
 
+  override def hashCode(): Int = super.hashCode()
+
   override def retain(): ManagedBuffer = this
 
   override def release(): ManagedBuffer = this
 
-  override def convertToNetty(): AnyRef = nettyByteBuffer
+  override def nioByteBuffer(): ByteBuffer = throw new UnsupportedOperationException
+
+  override def convertToNetty(): AnyRef = throw new UnsupportedOperationException
 }
 
 private[remote] object HadoopFileSegmentManagedBuffer {
   private val fs = RemoteShuffleManager.getFileSystem
+
   private[remote] lazy val handleCache =
-    new ConcurrentHashMap[Long, HashMap[Path, FSDataInputStream]]()
+    new ConcurrentHashMap[Long, mutable.HashMap[Path, FSDataInputStream]]()
   private val reuseFileHandle =
     RemoteShuffleManager.getConf.get(RemoteShuffleConf.REUSE_FILE_HANDLE)
 }
 
 /**
-  * This is an RPC message encapsulating HadoopFileSegmentManagedBuffers. Slightly different with
-  * the OpenBlocks message, this doesn't transfer block stream between executors through netty, but
-  * only returns file segment ranges(offsets and lengths). Due to in remote shuffle, there is a
-  * globally-accessible remote storage, like HDFS or DAOS.
-  */
+ * This is an RPC message encapsulating HadoopFileSegmentManagedBuffers. Slightly different with
+ * the OpenBlocks message, this doesn't transfer block stream between executors through netty, but
+ * only returns file segment ranges(offsets and lengths). Due to in remote shuffle, there is a
+ * globally-accessible remote storage, like HDFS or DAOS.
+ */
 class MessageForHadoopManagedBuffers(
     val buffers: Array[(String, HadoopFileSegmentManagedBuffer)]) extends Encodable {
 

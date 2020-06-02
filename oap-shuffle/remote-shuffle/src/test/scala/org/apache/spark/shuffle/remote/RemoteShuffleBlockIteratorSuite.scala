@@ -77,8 +77,10 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
         }
       })
 
-    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
-      (remoteBmId, blocks.keys.map(blockId => (blockId, 1.asInstanceOf[Long])).toSeq)).toIterator
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
+      (remoteBmId, blocks.keys.zipWithIndex.map {
+        case (blockId, mapIndex) => (blockId, 1.asInstanceOf[Long], mapIndex)
+      }.toSeq)).toIterator
 
     val taskContext = TaskContext.empty()
     val iterator = new RemoteShuffleBlockIterator(
@@ -199,7 +201,7 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
     val endPartition = 3
 
     val blockInfos = for (i <- 0 until numMaps; j <- startPartition until endPartition) yield {
-      (ShuffleBlockId(shuffleId, i, j), 1L)
+      (ShuffleBlockId(shuffleId, i, j), 1L, 1)
     }
 
     val blocksByAddress = Seq((shuffleServerId, blockInfos))
