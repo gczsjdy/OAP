@@ -20,10 +20,10 @@ package org.apache.spark.shuffle.remote
 import java.util.UUID
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.storage.{BlockId, TempLocalBlockId, TempShuffleBlockId}
 
 object RemoteShuffleUtils {
@@ -79,7 +79,7 @@ object RemoteShuffleUtils {
       serializerManager: SerializerManager,
       serializerInstance: SerializerInstance,
       bufferSize: Int,
-      writeMetrics: ShuffleWriteMetrics): RemoteBlockObjectWriter = {
+      writeMetrics: ShuffleWriteMetricsReporter): RemoteBlockObjectWriter = {
     val syncWrites = false // env.blockManager.conf.getBoolean("spark.shuffle.sync", false)
     new RemoteBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
       syncWrites, writeMetrics, blockId)

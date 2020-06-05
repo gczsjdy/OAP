@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle.remote
 
-import java.io.{InputStream, IOException}
+import java.io.{IOException, InputStream}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,11 +35,13 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.netty.RemoteShuffleTransferService
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.network.util.LimitedInputStream
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
 class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkContext {
+
+  val metrics = mock(classOf[ShuffleReadMetricsReporter])
 
   // With/without index cache, configurations set/unset
   testWithMultiplePath("basic read")(basicRead)
@@ -92,7 +94,9 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
-      true)
+      true,
+      metrics,
+      false)
 
     // The first block should be returned without an exception
     val (id1, _) = iterator.next()
@@ -215,7 +219,9 @@ class RemoteShuffleBlockIteratorSuite extends SparkFunSuite with LocalSparkConte
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
-      true)
+      true,
+      metrics,
+      false)
 
     val expected =
       expectPart0 ++ expectPart1 ++ expectPart2 ++ expectPart3 ++ expectPart4 ++ expectPart5

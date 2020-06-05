@@ -21,6 +21,7 @@ import java.io.IOException;
 
 import javax.annotation.Nullable;
 
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -89,7 +90,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
   private final int numPartitions;
   private final BlockManager blockManager;
   private final Partitioner partitioner;
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
   private final int shuffleId;
   private final long mapId;
   private final Serializer serializer;
@@ -114,7 +115,8 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
       BypassMergeSortShuffleHandle<K, V> handle,
       long mapId,
       TaskContext taskContext,
-      SparkConf conf) {
+      SparkConf conf,
+      ShuffleWriteMetricsReporter metrics) {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
@@ -124,7 +126,7 @@ public final class RemoteBypassMergeSortShuffleWriter<K, V> extends ShuffleWrite
     this.shuffleId = dep.shuffleId();
     this.partitioner = dep.partitioner();
     this.numPartitions = partitioner.numPartitions();
-    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
+    this.writeMetrics = metrics;
     this.serializer = dep.serializer();
     this.shuffleBlockResolver = shuffleBlockResolver;
   }

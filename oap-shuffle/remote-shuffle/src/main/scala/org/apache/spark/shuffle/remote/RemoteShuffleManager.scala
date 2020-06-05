@@ -23,12 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.shuffle._
 import org.apache.spark.shuffle.remote.RemoteShuffleManager.{active, appendRemoteStorageHadoopConfigurations}
+import org.apache.spark.shuffle.sort.SortShuffleManager.canUseBatchFetch
 import org.apache.spark.shuffle.sort._
 import org.apache.spark.util.collection.OpenHashSet
 
@@ -94,12 +94,17 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
+
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
+      handle.shuffleId, startPartition, endPartition)
+
     new RemoteShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
       shuffleBlockResolver,
-      startPartition,
-      endPartition,
-      context)
+      blocksByAddress,
+      context,
+      metrics,
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
   override def getReaderForRange[K, C](
@@ -110,13 +115,17 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    // Not right, place holder.
+
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByRange(
+      handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
+
     new RemoteShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]],
       shuffleBlockResolver,
-      startPartition,
-      endPartition,
-      context)
+      blocksByAddress,
+      context,
+      metrics,
+      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
   }
 
   /** Get a writer for a given partition. Called on executors by map tasks. */
@@ -136,7 +145,10 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
           shuffleBlockResolver,
           context.taskMemoryManager(),
           unsafeShuffleHandle,
-          mapId, context, env.conf)
+          mapId,
+          context,
+          env.conf,
+          metrics)
       case bypassMergeSortHandle: BypassMergeSortShuffleHandle[K @unchecked, V @unchecked] =>
         new RemoteBypassMergeSortShuffleWriter(
           env.blockManager,
@@ -144,7 +156,8 @@ private[spark] class RemoteShuffleManager(private val conf: SparkConf) extends S
           bypassMergeSortHandle,
           mapId,
           context,
-          env.conf)
+          env.conf,
+          metrics)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
         new RemoteShuffleWriter(shuffleBlockResolver, other, mapId, context)
     }

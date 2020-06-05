@@ -21,6 +21,7 @@ import java.util.Iterator;
 
 import javax.annotation.Nullable;
 
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.remote.RemoteShuffleManager$;
 import scala.Option;
 import scala.Product2;
@@ -82,11 +83,12 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final TaskMemoryManager memoryManager;
   private final SerializerInstance serializer;
   private final Partitioner partitioner;
-  private final ShuffleWriteMetrics writeMetrics;
   private final int shuffleId;
   private final long mapId;
   private final TaskContext taskContext;
   private final SparkConf sparkConf;
+  private final ShuffleWriteMetricsReporter writeMetrics;
+
   private final boolean transferToEnabled;
   private final int initialSortBufferSize;
   private final int inputBufferSizeInBytes;
@@ -131,7 +133,8 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       SerializedShuffleHandle<K, V> handle,
       long mapId,
       TaskContext taskContext,
-      SparkConf sparkConf) throws IOException {
+      SparkConf sparkConf,
+      ShuffleWriteMetricsReporter metrics) throws IOException {
     final int numPartitions = handle.dependency().partitioner().numPartitions();
     if (numPartitions > SortShuffleManager.MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE()) {
       throw new IllegalArgumentException(
@@ -147,9 +150,9 @@ public class RemoteUnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.shuffleId = dep.shuffleId();
     this.serializer = dep.serializer().newInstance();
     this.partitioner = dep.partitioner();
-    this.writeMetrics = taskContext.taskMetrics().shuffleWriteMetrics();
     this.taskContext = taskContext;
     this.sparkConf = sparkConf;
+    this.writeMetrics = metrics;
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
     this.initialSortBufferSize = sparkConf.getInt("spark.shuffle.sort.initialBufferSize",
         DEFAULT_INITIAL_SORT_BUFFER_SIZE);

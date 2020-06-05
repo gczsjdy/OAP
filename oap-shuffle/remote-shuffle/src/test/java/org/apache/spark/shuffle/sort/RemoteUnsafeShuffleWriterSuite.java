@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.*;
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.remote.RemoteShuffleBlockResolver;
 import scala.Option;
 import scala.Product2;
@@ -87,6 +88,9 @@ public class RemoteUnsafeShuffleWriterSuite {
 
   @Mock(answer = RETURNS_SMART_NULLS)
   ShuffleDependency<Object, Object, Object> shuffleDep;
+
+  @Mock(answer = RETURNS_SMART_NULLS)
+  ShuffleWriteMetricsReporter metrics;
 
   FileSystem fs;
 
@@ -426,7 +430,8 @@ public class RemoteUnsafeShuffleWriterSuite {
             new SerializedShuffleHandle<>(0,  shuffleDep),
             0, // map id
             taskContext,
-            conf);
+            conf,
+            metrics);
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.
@@ -475,7 +480,8 @@ public class RemoteUnsafeShuffleWriterSuite {
         new SerializedShuffleHandle<>(0, shuffleDep),
         1, // map id
         taskContext,
-        conf);
+        conf,
+        metrics);
   }
 
   private List<Tuple2<Object, Object>> readRecordsFromFile() throws IOException {

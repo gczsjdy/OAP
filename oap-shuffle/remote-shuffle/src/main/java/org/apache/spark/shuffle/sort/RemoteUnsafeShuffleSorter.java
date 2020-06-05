@@ -22,6 +22,7 @@ import java.util.LinkedList;
 
 import javax.annotation.Nullable;
 
+import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -81,7 +82,7 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
   private final BlockManager blockManager;
   private final TaskContext taskContext;
   private final RemoteShuffleBlockResolver resolver;
-  private final ShuffleWriteMetrics writeMetrics;
+  private final ShuffleWriteMetricsReporter writeMetrics;
 
   /**
    * Force this sorter to spill when there are this many elements in memory.
@@ -120,7 +121,7 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
       int initialSize,
       int numPartitions,
       SparkConf conf,
-      ShuffleWriteMetrics writeMetrics) {
+      ShuffleWriteMetricsReporter writeMetrics) {
     super(memoryManager,
         (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, memoryManager.pageSizeBytes()),
         memoryManager.getTungstenMemoryMode());
@@ -152,7 +153,7 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
    */
   private void writeSortedFile(boolean isLastFile) {
 
-    final ShuffleWriteMetrics writeMetricsToUse;
+    final ShuffleWriteMetricsReporter writeMetricsToUse;
 
     if (isLastFile) {
       // We're writing the final non-spill file, so we _do_ want to count this as shuffle bytes.
@@ -249,8 +250,10 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
       // Note that we intentionally ignore the value of `writeMetricsToUse.shuffleWriteTime()`.
       // Consistent with ExternalSorter, we do not count this IO towards shuffle write time.
       // This means that this IO time is not accounted for anywhere; SPARK-3577 will fix this.
-      writeMetrics.incRecordsWritten(writeMetricsToUse.recordsWritten());
-      taskContext.taskMetrics().incDiskBytesSpilled(writeMetricsToUse.bytesWritten());
+      writeMetrics.incRecordsWritten(
+        ((ShuffleWriteMetrics)writeMetricsToUse).recordsWritten());
+      taskContext.taskMetrics().incDiskBytesSpilled(
+        ((ShuffleWriteMetrics)writeMetricsToUse).bytesWritten());
     }
   }
 

@@ -17,10 +17,11 @@
 
 package org.apache.spark.shuffle.remote
 
-import java.io.{InputStream, IOException}
+import java.io.{IOException, InputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.{lang, util}
+
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -28,12 +29,11 @@ import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS, REDUCER_MAX_REQS_IN_FLIGHT, REDUCER_MAX_SIZE_IN_FLIGHT}
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle._
-import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -73,14 +73,15 @@ final class RemoteShuffleBlockIterator(
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
     maxBlocksInFlightPerAddress: Int,
-    detectCorrupt: Boolean)
+    detectCorrupt: Boolean,
+    readMetrics: ShuffleReadMetricsReporter,
+    doBatchFetch: Boolean)
+
   extends Iterator[(BlockId, InputStream)] with Logging {
 
   import RemoteShuffleBlockIterator._
 
   private val indexCacheEnabled = resolver.indexCacheEnabled
-
-  private val readMetrics = context.taskMetrics().createTempShuffleReadMetrics()
 
   /**
    * Total number of blocks to fetch. This should be equal to the total number of blocks
