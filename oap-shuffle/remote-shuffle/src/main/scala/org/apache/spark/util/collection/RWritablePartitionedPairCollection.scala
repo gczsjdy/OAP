@@ -22,7 +22,7 @@ import java.util.Comparator
 import org.apache.spark.shuffle.remote.RemoteBlockObjectWriter
 
 /**
-  * NOTE: This is to override Spark 2.4.0's WritablePartitionedIterator: Changing the writeNext
+  * NOTE: This is to override Spark 3.0.0's WritablePartitionedIterator: Changing the writeNext
   * interface's args type to RemoteBlockObjectWriter
   *
   * Note: We made several places returning a [[RemoteBlockObjectWriter]]. And we didn't just
