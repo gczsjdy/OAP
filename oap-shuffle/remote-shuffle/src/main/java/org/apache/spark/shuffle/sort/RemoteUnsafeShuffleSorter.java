@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.LinkedList;
 
@@ -51,6 +52,7 @@ import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
+import scala.collection.mutable.ArrayBuffer;
 
 /**
  * An external sorter that is specialized for sort-based shuffle.
@@ -151,7 +153,7 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
    *                   bytes written should be counted towards shuffle spill metrics rather than
    *                   shuffle write metrics.
    */
-  private void writeSortedFile(boolean isLastFile) {
+  private void writeSortedFile(boolean isLastFile) throws IOException {
 
     final ShuffleWriteMetricsReporter writeMetricsToUse;
 
@@ -195,6 +197,8 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
 
     int currentPartition = -1;
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
+    ByteArrayOutputStream res = new ByteArrayOutputStream();
+    int resLength = 0;
     while (sortedRecords.hasNext()) {
       sortedRecords.loadNext();
       final int partition = sortedRecords.packedRecordPointer.getPartitionId();
@@ -218,6 +222,8 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
         Platform.copyMemory(
             recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
         writer.write(writeBuffer, 0, toTransfer);
+        res.write(writeBuffer);
+        resLength += toTransfer;
         recordReadPosition += toTransfer;
         dataRemaining -= toTransfer;
       }
@@ -226,6 +232,14 @@ final class RemoteUnsafeShuffleSorter extends MemoryConsumer {
 
     final HadoopFileSegment committedSegment = writer.commitAndGet();
     writer.close();
+    byte[] immediateRead = new byte[resLength];
+    RemoteShuffleManager.getFileSystem().open(file).readFully(immediateRead);
+    byte[] resArray = res.toByteArray();
+    for (int i = 0; i < resLength; i ++ ) {
+      if (immediateRead[i]!=resArray[i]) {
+        logger.warn("byte " + i + " of " + file.toString() + " unequal");
+      }
+    }
     // If `writeSortedFile()` was called from `closeAndGetSpills()` and no records were inserted,
     // then the file might be empty. Note that it might be better to avoid calling
     // writeSortedFile() in that case.
