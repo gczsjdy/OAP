@@ -173,9 +173,11 @@ final class RemoteShuffleBlockIterator(
     reqsInFlight += 1
 
     // so we can look up the info of each blockID
-    val infoMap = req.blocks.map { case (blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))}.toMap
+    val infoMap = req.blocks.map {
+      case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
+    }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
-    val blockIds = req.blocks.map(_._1)
+    val blockIds = req.blocks.map(_.blockId)
     val address = req.address
 
     val blockFetchingListener = new BlockFetchingListener {
@@ -254,7 +256,7 @@ final class RemoteShuffleBlockIterator(
     for ((address, blockInfos) <- blocksByAddress) {
       val iterator = blockInfos.iterator
       var curRequestSize = 0L
-      var curBlocks = new ArrayBuffer[(BlockId, Long, Int)]
+      var curBlocks = new ArrayBuffer[FetchBlockInfo]
       while (iterator.hasNext) {
         val (blockId, size, mapIndex) = iterator.next()
         if (size < 0) {
@@ -262,7 +264,7 @@ final class RemoteShuffleBlockIterator(
         } else if (size == 0) {
           throw new BlockException(blockId, "Zero-sized blocks should be excluded.")
         } else {
-          curBlocks += ((blockId, size, mapIndex))
+          curBlocks += FetchBlockInfo(blockId, size, mapIndex)
           numBlocksToFetch += 1
           curRequestSize += size
         }
@@ -273,10 +275,10 @@ final class RemoteShuffleBlockIterator(
         if (curRequestSize >= targetRequestSize ||
           curBlocks.size >= maxBlocksInFlightPerAddress) {
           // Add this FetchRequest
-          remoteRequests += new RemoteFetchRequest(address, curBlocks)
+          remoteRequests += RemoteFetchRequest(address, curBlocks)
           logDebug(s"Creating fetch request of $curRequestSize at $address " +
             s"with ${curBlocks.size} blocks")
-          curBlocks = new ArrayBuffer[(BlockId, Long, Int)]
+          curBlocks = new ArrayBuffer[FetchBlockInfo]
           curRequestSize = 0
         }
       }
@@ -399,7 +401,7 @@ final class RemoteShuffleBlockIterator(
               } else {
                 logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
                 corruptedBlocks += blockId
-                fetchRequests += RemoteFetchRequest(address, Array((blockId, size, mapIndex)))
+                fetchRequests += RemoteFetchRequest(address, Array(FetchBlockInfo(blockId, size, mapIndex)))
                 result = null
               }
           } finally {
@@ -505,13 +507,22 @@ private[remote] object RemoteShuffleBlockIterator {
     ThreadUtils.newDaemonCachedThreadPool("shuffle-data-fetching", maxConcurrentFetches))
 
   /**
+   * The block information to fetch used in FetchRequest.
+   * @param blockId block id
+   * @param size estimated size of the block. Note that this is NOT the exact bytes.
+   *             Size of remote block is used to calculate bytesInFlight.
+   * @param mapIndex the mapIndex for this block, which indicate the index in the map stage.
+   */
+  private[remote] case class FetchBlockInfo(blockId: BlockId, size: Long, mapIndex: Int)
+
+  /**
    * A request to fetch blocks from a remote BlockManager.
    * @param address remote BlockManager to fetch from.
    * @param blocks Sequence of tuple, where the first element is the block id,
    *               and the second element is the estimated size, used to calculate bytesInFlight.
    */
-  case class RemoteFetchRequest(address: BlockManagerId, blocks: Seq[(BlockId, Long, Int)]) {
-    val size = blocks.map(_._2).sum
+  case class RemoteFetchRequest(address: BlockManagerId, blocks: Seq[FetchBlockInfo]) {
+    val size = blocks.map(_.size).sum
   }
 
   /**
