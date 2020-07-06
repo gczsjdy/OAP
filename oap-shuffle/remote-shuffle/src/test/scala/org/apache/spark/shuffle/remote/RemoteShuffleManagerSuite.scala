@@ -19,9 +19,9 @@ package org.apache.spark.shuffle.remote
 
 import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.{HttpRequest, HttpResponse}
-
 import org.apache.spark._
 import org.apache.spark.internal.config
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
@@ -34,6 +34,14 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
   testWithMultiplePath("sort")(sort(500, 13, true))
   testWithMultiplePath("sort large partition")(sort(500000, 2))
+
+  test("Adaptive Query Execution") {
+    sc = new SparkContext("local", "test", createSparkConf(true, aqe = true))
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    spark.range(100).groupBy("value").count()
+
+  }
+
 
   test("disable bypass-merge-sort shuffle writer by default") {
     sc = new SparkContext("local", "test", new SparkConf(true))
@@ -97,6 +105,9 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     test(name + " with optimized shuffle path") {
       body(createSparkConf(loadDefaults, bypassMergeSort = false, unsafeOptimized = true))
     }
+    test(name + " with optimized shuffle path + AQE") {
+      body(createSparkConf(loadDefaults, bypassMergeSort = false, unsafeOptimized = true, aqe = true))
+    }
     test(name + " with bypass-merge-sort shuffle path") {
       body(createSparkConf(loadDefaults, bypassMergeSort = true, unsafeOptimized = false))
     }
@@ -107,6 +118,10 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     test(name + " with optimized shuffle path + index cache") {
       body(createSparkConf(loadDefaults,
         bypassMergeSort = false, unsafeOptimized = true, indexCache = true))
+    }
+    test(name + " with optimized shuffle path + index cache + AQE") {
+      body(createSparkConf(loadDefaults,
+        bypassMergeSort = false, unsafeOptimized = true, indexCache = true, aqe = true))
     }
     test(name + " with whatever shuffle write path + constraining maxBlocksPerAdress") {
       body(createSparkConf(loadDefaults, indexCache = false, setMaxBlocksPerAdress = true))
@@ -159,7 +174,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
   private def createSparkConf(
       loadDefaults: Boolean, bypassMergeSort: Boolean = false, unsafeOptimized: Boolean = true,
-      indexCache: Boolean = false, setMaxBlocksPerAdress: Boolean = false): SparkConf = {
+      indexCache: Boolean = false, setMaxBlocksPerAdress: Boolean = false, aqe: Boolean = false): SparkConf = {
     val smallThreshold = 1
     val largeThreshold = 50
     val conf = createDefaultConf(loadDefaults)
@@ -176,6 +191,10 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     }
     if (setMaxBlocksPerAdress) {
       conf.set(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS.key, "1")
+    }
+    if (aqe) {
+      conf.set("spark.sql.adaptive.enabled", "true")
+
     }
     conf
   }
