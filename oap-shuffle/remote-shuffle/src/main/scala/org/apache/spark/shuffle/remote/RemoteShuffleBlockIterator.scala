@@ -35,7 +35,7 @@ import org.apache.spark.internal.config.{REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRES
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.shuffle._
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockBatchId, ShuffleBlockFetcherIterator, ShuffleBlockId}
+import org.apache.spark.storage.{BlockException, BlockId, BlockManagerId, ShuffleBlockBatchId, ShuffleBlockId}
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, ThreadUtils, Utils}
 import org.apache.spark.{SparkConf, SparkEnv, SparkException, TaskContext}
