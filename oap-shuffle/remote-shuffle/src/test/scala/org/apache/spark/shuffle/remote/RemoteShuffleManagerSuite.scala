@@ -40,31 +40,9 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
   testWithMultiplePath("sort")(sort(500, 13, true))
   testWithMultiplePath("sort large partition")(sort(500000, 2))
 
-  test("Adaptive Query Execution on, small data set") {
-    sc = new SparkContext("local[*]", "test", createSparkConf(true, aqe = true))
-    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-    import spark.implicits._
-    val originalData = 0 until 200
-    val dataSet = spark.createDataset(originalData).groupBy("value").sum("value")
-    assert(dataSet.collect().sortBy(_(0).asInstanceOf[Int]) === originalData.map(i => Row(i, i)))
-    println(dataSet.queryExecution.toRdd.partitions.length)
-    // Ensuring AQE has coalesced reduce stage partitions to a smaller number, so this UT went
-    // through a different path
-    assert(dataSet.queryExecution.toRdd.partitions.length != initialPartitionNum)
-  }
-
-  test("Adaptive Query Execution on, large data set") {
-    sc = new SparkContext("local[*]", "test", createSparkConf(true, aqe = true))
-    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
-    import spark.implicits._
-    val originalData = 0 until 1000000
-    val dataSet = spark.createDataset(originalData).groupBy("value").sum("value")
-    assert(dataSet.collect().sortBy(_(0).asInstanceOf[Int]) === originalData.map(i => Row(i, i)))
-    println(dataSet.queryExecution.toRdd.partitions.length)
-    // Ensuring AQE has coalesced reduce stage partitions to a smaller number, so this UT went
-    // through a different path
-    assert(dataSet.queryExecution.toRdd.partitions.length != initialPartitionNum)
-  }
+  // Some ShuffleBlocks, even reduce partitions(initial) may be empty
+  testWithIndexCacheOnOff("Adaptive Query Execution on, small data set")(groupBySum(200))
+  testWithIndexCacheOnOff("Adaptive Query Execution on, large data set")(groupBySum(1000000))
 
   test("disable bypass-merge-sort shuffle writer by default") {
     sc = new SparkContext("local", "test", new SparkConf(true))
@@ -119,7 +97,7 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     manager.getHadoopConf
   }
 
-  // Optimized shuffle writer & non-optimized shuffle writer
+  // Going through different shuffle write/read path
   private def testWithMultiplePath(name: String, loadDefaults: Boolean = true)
       (body: (SparkConf => Unit)): Unit = {
     test(name + " with general shuffle path") {
@@ -155,6 +133,16 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  private def testWithIndexCacheOnOff(name: String, loadDefaults: Boolean = true)
+    (body: (SparkConf => Unit)): Unit = {
+    test(name + " index cache") {
+      body(createSparkConf(loadDefaults, indexCache = true))
+    }
+    test(name) {
+      body(createSparkConf(loadDefaults, indexCache = false))
+    }
+  }
+
   private def repartition(
       dataSize: Int, preShuffleNumPartitions: Int, postShuffleNumPartitions: Int)
       (conf: SparkConf): Unit = {
@@ -186,6 +174,20 @@ class RemoteShuffleManagerSuite extends SparkFunSuite with LocalSparkContext {
 
     val newRdd = rdd.sortBy((x: Int) => x.toLong)
     assert(newRdd.collect() === data)
+  }
+
+  // a SQL test that triggers AE's coalescing shuffle partitions feature
+  private def groupBySum(dataSize: Int)(conf: SparkConf): Unit = {
+    sc = new SparkContext("local[*]", "test", conf)
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
+    import spark.implicits._
+    val originalData = 0 until dataSize
+    val dataSet = spark.createDataset(originalData).groupBy("value").sum("value")
+    assert(dataSet.collect().sortBy(_(0).asInstanceOf[Int]) === originalData.map(i => Row(i, i)))
+    println(dataSet.queryExecution.toRdd.partitions.length)
+    // Ensuring AQE has coalesced reduce stage partitions to a smaller number, so this UT went
+    // through a different path
+    assert(dataSet.queryExecution.toRdd.partitions.length != initialPartitionNum)
   }
 
   private def createSparkConf(
